@@ -6,29 +6,225 @@
 
 <input id="upload" type="file" multiple directory webkitdirectory allowdirs>
 
+
+<input id="readMore0" type="button" value="Read more from file 0">
+
+
 <script type="text/javascript">
 
+// -> Drag and drop files: highlight window
+// -> Btn to upload folder vs. upload files
 // -> Upload multiple FASTQs
+// -> One tab per FASTQ; sample Nreads / Nfiles reads by default
+// -> Update plots as sample more data from file
+// -> Allow user to increase #reads sampled
 
+var FILES = {};
 
-
-document.querySelector("#upload").addEventListener("change", function(a,b)
+document.querySelector("#upload").addEventListener("change", function()
 {
 	var tStart = Date.now();
 
-	fastqValidate(this.files, function(data)
+	// fastqValidate(this.files, function(data)
+	// {
+	// 	console.log("DONE: " + (Date.now() - tStart) + " ms")
+	// 	console.log(data)
+	// });
+
+	FILES = this.files
+
+	for(var i = 0; i < FILES.length; i++)
 	{
-		console.log("DONE: " + (Date.now() - tStart) + " ms")
-		console.log(data)
-	});
+		var file = FILES[i];
+
+		// Skip files that aren't .fastq, .fq, .gz
+		if(!FASTQ.isValidFileName(file))
+			continue;
+
+		console.log(FILES[i].name)
+		// console.log(FASTQ.isValidChunk(file))
+		// console.log("------")
+		// console.log(FASTQ.isValidChunk(file))
+	}
+
 });
+
+
+document.querySelector("#readMore0").addEventListener("click", function()
+{
+	FASTQ.getNextChunk( FILES[1] )
+})
+
+
+
+var FASTQ = (function()
+{
+	var _fastqRegex  = /.fastq|.fq|.fastq.gz|.fq.gz/,
+		_fastqBytes  = 1024 * 50,
+		_fastqLines  = 4000,
+		_fastqPhred  = 33,
+		_fastqPtr    = {}; // pointer to current byte position; key = file name
+
+
+	// =========================================================================
+	// Validate a FASTQ file
+	// =========================================================================
+
+	// Check if file has valid file name
+	function isValidFileName(file)
+	{
+		if(file == null || !("name" in file) || !file.name.match(_fastqRegex))
+			return false;
+
+		return true;
+	}
+
+	// Check if file chunk is valid FASTQ
+	function isValidChunk(file)
+	{
+		// Validate file name
+		if(!isValidFileName(file))
+			return;
+
+		//
+	}
+
+	// =========================================================================
+	// 
+	// =========================================================================
+
+	//
+	function parseChunk(file, reader)
+	{
+		var chunk   = reader.result,
+			nbLines = _fastqLines;
+
+		// Unzip FASTQ chunk and split by line
+		if(file.name.match(/.gz$/))
+			chunk = new TextDecoder("utf-8").decode(pako.inflate(chunk));
+		chunk = chunk.split("\n");
+
+		// Number of lines to validate
+		if(chunk.length < nbLines)
+			nbLines = chunk.length - chunk.length % 4;
+		// Skip last read: Make sure it isn't clipped
+		nbLines -= 4;
+
+		// Need at least 4 lines... otherwise skip this file
+		if(nbLines < 4)
+			return;
+
+		console.log(chunk)
+
+		return chunk;
+	}
+
+	// 
+	function getNextChunk(file)
+	{
+		// 
+		if(!(file.name in _fastqPtr))
+			_fastqPtr[file.name] = 0;
+
+		// 
+		var reader   = new FileReader(),
+			startPos = _fastqPtr[file.name],
+			endPos   = Math.min(startPos + _fastqBytes, file.size);
+
+		// Disable button
+		// ?
+		// Keep it disabled if done reading file
+		if(startPos >= endPos)
+			return;
+		// Undisable button
+		// ?
+
+		reader.readAsBinaryString(file.slice(startPos, endPos));
+		reader.onload = function(e)
+		{
+			var fastqPreview = parseChunk(file, reader);
+
+console.log(fastqPreview)
+
+			// console.log("--> " + file.name)
+
+			// // Validate FASTQ:
+			// // - Header line must start with @
+			// // - Sequence and qual lines must be of equal lengths
+			// for(var i = 0; i < nbLines; i += 4)
+			// {
+			// 	// Detect invalid FASTQ files
+			// 	if(!fastqPreview[i].match(/^@/) || fastqPreview[i+1].length != fastqPreview[i+3].length)
+			// 	{
+			// 		isValid = false;
+			// 		fastqValidate(_allFiles, _callback, _i + 1, isValid);
+			// 		return;
+			// 	}
+
+			// 	// Keep track of FASTQ information
+			// 	var seq = fastqPreview[i+1],
+			// 		qual= fastqPreview[i+3];
+			// 	for(var j = 0; j < seq.length; j++)
+			// 	{
+			// 		if(!(j in fastqInfo)) {
+			// 			fastqInfo[j] = {};
+			// 			fastqQual[j] = {};
+			// 		}
+			// 		if(!(seq[j] in fastqInfo[j])) {
+			// 			fastqInfo[j] = { A:0, C:0, G:0, T:0, N:0 };
+			// 			fastqQual[j] = { tot:0, n:0 };
+			// 		}
+
+			// 		// Keep track of number of bases of this kind at current read position
+			// 		fastqInfo[j][ seq[j] ]++;
+			// 		// Add up all quality scores at this position
+			// 		fastqQual[j].tot += qual[j].charCodeAt() - _fastqPhred;
+			// 		fastqQual[j].n   ++;
+			// 	}
+			// }
+
+			// // Calculate FASTQ statistics
+			// var fastqStats = [];
+			// for(var i = 0; i < fastqInfo.length; i++)
+			// {
+			// 	fastqStats[i] = {
+			// 		gc   : (fastqInfo[i]["G"]+fastqInfo[i]["C"]) / (fastqInfo[i]["A"]+fastqInfo[i]["C"]+fastqInfo[i]["G"]+fastqInfo[i]["T"]),
+			// 		qual : fastqQual[i].tot / fastqQual[i].n
+			// 	};
+			// }
+			// console.log("Done with file " + _i + ": " + nbLines + " lines");
+
+			// // Proceed to next FASTQ file
+			// fastqValidate(_allFiles, _callback, _i + 1, isValid);
+			// return;
+
+
+
+			// TODO: reset pos to last byte of valid fastq line
+
+			_fastqPtr[file.name] = endPos;
+		}
+	}
+
+
+
+
+
+	return {
+		isValidChunk: isValidChunk,
+		isValidFileName: isValidFileName,
+		getNextChunk: getNextChunk
+	};
+})();
+
+
 
 
 
 
 
 // =============================================================================
-// Validate FASTQ based on file name
+// Parse FASTQ files, validate them and calculate statisticss
 // =============================================================================
 
 var _fastqValidate = {};
@@ -85,6 +281,7 @@ function fastqValidate(_allFiles, _callback, _i, _result)
 
 			// Split file by line
 			fastqPreview = fastqPreview.split("\n");
+			console.log("--> " + file.name)
 
 			// Number of lines to validate
 			var nbLines = _fastqLines;
