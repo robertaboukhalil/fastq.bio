@@ -90,31 +90,83 @@ var FASTQ = (function()
 	}
 
 	// =========================================================================
-	// 
+	// Parse chunks
 	// =========================================================================
 
 	//
 	function parseChunk(file, reader)
 	{
 		var chunk   = reader.result,
-			nbLines = _fastqLines;
+			nbLines = _fastqLines,
+			stats   = { info: [], qual: [] };
 
-		// Unzip FASTQ chunk and split by line
+		// Unzip FASTQ chunk
 		if(file.name.match(/.gz$/))
 			chunk = new TextDecoder("utf-8").decode(pako.inflate(chunk));
-		chunk = chunk.split("\n");
 
 		// Number of lines to validate
+		chunk = chunk.split("\n");
 		if(chunk.length < nbLines)
 			nbLines = chunk.length - chunk.length % 4;
-		// Skip last read: Make sure it isn't clipped
-		nbLines -= 4;
+		nbLines -= 4; // Skip last read: Make sure it isn't clipped
 
 		// Need at least 4 lines... otherwise skip this file
-		if(nbLines < 4)
+		if(nbLines < 4) {
+			_fastqPtr[file.name] = -1;
 			return;
+		}
+
+		// Validate FASTQ:
+		// - Header line must start with @
+		// - Sequence and qual lines must be of equal lengths
+		for(var i = 0; i < nbLines; i += 4)
+		{
+			// Detect invalid FASTQ chunk
+			if(!chunk[i].match(/^@/) || chunk[i+1].length != chunk[i+3].length) {
+				_fastqPtr[file.name] = -1;
+				return;
+			}
+
+			// Keep track of FASTQ information
+			var seq = chunk[i+1], qual = chunk[i+3];
+			for(var j = 0; j < seq.length; j++)
+			{
+				if(!(j in stats.info)) {
+					stats.info[j] = {};
+					stats.qual[j] = {};
+				}
+				if(!(seq[j] in stats.info[j])) {
+					stats.info[j] = { A:0, C:0, G:0, T:0, N:0 };
+					stats.qual[j] = { tot:0, n:0 };
+				}
+
+				// Keep track of number of bases of this kind at current read position
+				stats.info[j][ seq[j] ]++;
+				// Add up all quality scores at this position
+				stats.qual[j].tot += qual[j].charCodeAt() - _fastqPhred;
+				stats.qual[j].n   ++;
+			}
+		}
+
+		// Keep track of nb bytes read
+		var bytesRead = 0;
+		for(var i = 0; i < nbLines; i++)
+			bytesRead += chunk[i].length;
+ 		_fastqPtr[file.name] += bytesRead;
+
+		// // Calculate FASTQ statistics
+		// var fastqStats = [];
+		// for(var i = 0; i < fastqInfo.length; i++)
+		// {
+		// 	fastqStats[i] = {
+		// 		gc   : (fastqInfo[i]["G"]+fastqInfo[i]["C"]) / (fastqInfo[i]["A"]+fastqInfo[i]["C"]+fastqInfo[i]["G"]+fastqInfo[i]["T"]),
+		// 		qual : fastqQual[i].tot / fastqQual[i].n
+		// 	};
+		// }
+		// // console.log("Done with file " + _i + ": " + nbLines + " lines");
 
 		console.log(chunk)
+		console.log(stats)
 
 		return chunk;
 	}
@@ -134,7 +186,7 @@ var FASTQ = (function()
 		// Disable button
 		// ?
 		// Keep it disabled if done reading file
-		if(startPos >= endPos)
+		if(startPos >= endPos || startPos == -1 || endPos == -1)
 			return;
 		// Undisable button
 		// ?
@@ -144,55 +196,9 @@ var FASTQ = (function()
 		{
 			var fastqPreview = parseChunk(file, reader);
 
-console.log(fastqPreview)
+// console.log(fastqPreview)
 
 			// console.log("--> " + file.name)
-
-			// // Validate FASTQ:
-			// // - Header line must start with @
-			// // - Sequence and qual lines must be of equal lengths
-			// for(var i = 0; i < nbLines; i += 4)
-			// {
-			// 	// Detect invalid FASTQ files
-			// 	if(!fastqPreview[i].match(/^@/) || fastqPreview[i+1].length != fastqPreview[i+3].length)
-			// 	{
-			// 		isValid = false;
-			// 		fastqValidate(_allFiles, _callback, _i + 1, isValid);
-			// 		return;
-			// 	}
-
-			// 	// Keep track of FASTQ information
-			// 	var seq = fastqPreview[i+1],
-			// 		qual= fastqPreview[i+3];
-			// 	for(var j = 0; j < seq.length; j++)
-			// 	{
-			// 		if(!(j in fastqInfo)) {
-			// 			fastqInfo[j] = {};
-			// 			fastqQual[j] = {};
-			// 		}
-			// 		if(!(seq[j] in fastqInfo[j])) {
-			// 			fastqInfo[j] = { A:0, C:0, G:0, T:0, N:0 };
-			// 			fastqQual[j] = { tot:0, n:0 };
-			// 		}
-
-			// 		// Keep track of number of bases of this kind at current read position
-			// 		fastqInfo[j][ seq[j] ]++;
-			// 		// Add up all quality scores at this position
-			// 		fastqQual[j].tot += qual[j].charCodeAt() - _fastqPhred;
-			// 		fastqQual[j].n   ++;
-			// 	}
-			// }
-
-			// // Calculate FASTQ statistics
-			// var fastqStats = [];
-			// for(var i = 0; i < fastqInfo.length; i++)
-			// {
-			// 	fastqStats[i] = {
-			// 		gc   : (fastqInfo[i]["G"]+fastqInfo[i]["C"]) / (fastqInfo[i]["A"]+fastqInfo[i]["C"]+fastqInfo[i]["G"]+fastqInfo[i]["T"]),
-			// 		qual : fastqQual[i].tot / fastqQual[i].n
-			// 	};
-			// }
-			// console.log("Done with file " + _i + ": " + nbLines + " lines");
 
 			// // Proceed to next FASTQ file
 			// fastqValidate(_allFiles, _callback, _i + 1, isValid);
@@ -202,7 +208,7 @@ console.log(fastqPreview)
 
 			// TODO: reset pos to last byte of valid fastq line
 
-			_fastqPtr[file.name] = endPos;
+			// _fastqPtr[file.name] = endPos;
 		}
 	}
 
