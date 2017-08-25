@@ -102,7 +102,7 @@ var FASTQ = (function()
 			isGzip  = file.name.match(/.gz$/);
 
 		// Unzip FASTQ chunk
-		if(isGzip)
+		if(isGzip) 
 			chunk = new TextDecoder("utf-8").decode(pako.inflate(chunk));
 
 		// Number of lines to validate
@@ -148,48 +148,31 @@ var FASTQ = (function()
 
 		// Keep track of nb bytes read
 		var bytesRead = 0;
-		// var bytesTxt = "";
 		for(var i = 0; i < nbLines; i++)
-		{
 			bytesRead += chunk[i].length + 1; // +1 because of \n
-			// if(isGzip) // if gzip, need text
-			// 	bytesTxt = bytesTxt + chunk[i] + "\n";
-		}
+		_fastqPtr[file.name] += bytesRead;
 
- 		// Update pointer (and support gzip)
-		if(isGzip)
-		{
-			// // For gzip
-			// var compressed = new TextEncoder("utf-8").encode(bytesTxt);
-			// console.log(bytesTxt)
-			// console.log(compressed)
-			// try {
-			// 	var result = pako.deflate(compressed);
-			// 	console.log(result)
-			// 	_fastqPtr[file.name] += result.length;
-			// } catch (err) {
-			// 	console.log(err);
-			// 	_fastqPtr[file.name] = -1;
-			// }
- 			console.log(reader.result.length)
- 			_fastqPtr[file.name] += reader.result.length+1;
-		} else
- 			_fastqPtr[file.name] += bytesRead;
-
-		// // Calculate FASTQ statistics
-		// var fastqStats = [];
-		// for(var i = 0; i < fastqInfo.length; i++)
+		// // Update pointer (and support gzip)
+		// if(isGzip)
 		// {
-		// 	fastqStats[i] = {
-		// 		gc   : (fastqInfo[i]["G"]+fastqInfo[i]["C"]) / (fastqInfo[i]["A"]+fastqInfo[i]["C"]+fastqInfo[i]["G"]+fastqInfo[i]["T"]),
-		// 		qual : fastqQual[i].tot / fastqQual[i].n
-		// 	};
-		// }
-		// // console.log("Done with file " + _i + ": " + nbLines + " lines");
+		// 	// // For gzip
+		// 	// var compressed = new TextEncoder("utf-8").encode(bytesTxt);
+		// 	// console.log(bytesTxt)
+		// 	// console.log(compressed)
+		// 	// try {
+		// 	// 	var result = pako.deflate(compressed);
+		// 	// 	console.log(result)
+		// 	// 	_fastqPtr[file.name] += result.length;
+		// 	// } catch (err) {
+		// 	// 	console.log(err);
+		// 	// 	_fastqPtr[file.name] = -1;
+		// 	// }
+		// 	// console.log(chunkPako.length)
+		// 	// _fastqPtr[file.name] += chunkPako.length //reader.result.length+1;
+		// } else
+		// 	_fastqPtr[file.name] += bytesRead;
 
-		console.log(stats)
-
-		return chunk;
+		return stats;
 	}
 
 	// Get next FASTQ chunk
@@ -204,22 +187,32 @@ var FASTQ = (function()
 			startPos = _fastqPtr[file.name],
 			endPos   = Math.min(startPos + _fastqBytes, file.size);
 
-console.log(startPos)
-console.log(endPos)
 		// Disable button
-		// ?
+		// TODO: ?
 		// Keep it disabled if done reading file
 		if(startPos >= endPos || startPos == -1 || endPos == -1)
 			return;
 		// Undisable button
-		// ?
+		// TODO: ?
 
 		reader.readAsBinaryString(file.slice(startPos, endPos));
 		reader.onload = function(e)
 		{
-			var fastqPreview = parseChunk(file, reader);
+			var chunkStats = parseChunk(file, reader);
 
-// console.log(fastqPreview)
+console.log(chunkStats)
+
+			// // Calculate FASTQ statistics
+			// var fastqStats = [];
+			// for(var i = 0; i < fastqInfo.length; i++)
+			// {
+			// 	fastqStats[i] = {
+			// 		gc   : (fastqInfo[i]["G"]+fastqInfo[i]["C"]) / (fastqInfo[i]["A"]+fastqInfo[i]["C"]+fastqInfo[i]["G"]+fastqInfo[i]["T"]),
+			// 		qual : fastqQual[i].tot / fastqQual[i].n
+			// 	};
+			// }
+			// // console.log("Done with file " + _i + ": " + nbLines + " lines");
+
 
 			// console.log("--> " + file.name)
 
@@ -235,10 +228,6 @@ console.log(endPos)
 		}
 	}
 
-
-
-
-
 	return {
 		isValidChunk: isValidChunk,
 		isValidFileName: isValidFileName,
@@ -247,137 +236,6 @@ console.log(endPos)
 })();
 
 
-
-
-
-
-
-// =============================================================================
-// Parse FASTQ files, validate them and calculate statisticss
-// =============================================================================
-
-var _fastqValidate = {};
-function fastqValidate(_allFiles, _callback, _i, _result)
-{
-	// -------------------------------------------------------------------------
-	// Vars
-	// -------------------------------------------------------------------------
-	var _i = _i || 0;
-	var _fastqRegex = /.fastq|.fq/,
-		_fastqBytes = 1024 * 50,
-		_fastqLines = 4000,
-		_fastqPhred = 33;
-
-	// End loop if viewed all files
-	if(_i > _allFiles.length) {
-		_callback(_fastqValidate);
-		return;
-	}
-
-	// Save previous result if any
-	if(_i > 0)
-		_fastqValidate[_allFiles[_i - 1].name] = _result;
-
-	// Launch recursion
-	f(_allFiles[_i]);
-
-	// -------------------------------------------------------------------------
-	// Function to validate a single FASTQ file
-	// -------------------------------------------------------------------------
-	function f(file)
-	{
-		// Validate file name
-		if(file == null || !("name" in file) || !file.name.match(_fastqRegex)) {
-			fastqValidate(_allFiles, _callback, _i + 1, false);
-			return;
-		}
-
-		// Validate first few lines in the file
-		var reader  = new FileReader();
-		var isValid = true;
-		var fastqInfo = [],
-			fastqQual = [];
-
-		reader.readAsBinaryString( file.slice(0, Math.min(_fastqBytes, file.size)) );
-		reader.onload = function(e)
-		{
-			// Gunzip chunk if need be
-			var fastqPreview = "";
-			if(file.name.match(/.gz$/))
-				fastqPreview = new TextDecoder("utf-8").decode(pako.inflate(reader.result));
-			else
-				fastqPreview = reader.result;
-
-			// Split file by line
-			fastqPreview = fastqPreview.split("\n");
-
-			// Number of lines to validate
-			var nbLines = _fastqLines;
-			if(fastqPreview.length < nbLines)
-				nbLines = fastqPreview.length - fastqPreview.length % 4;
-			// Skip last read: Make sure it isn't clipped
-			nbLines -= 4;
-
-			// Need at least 4 lines... otherwise skip this file
-			if(nbLines < 4)
-			{
-				isValid = false;
-				fastqValidate(_allFiles, _callback, _i + 1, isValid);
-				return;
-			}
-
-			// Validate FASTQ:
-			// - Header line must start with @
-			// - Sequence and qual lines must be of equal lengths
-			for(var i = 0; i < nbLines; i += 4)
-			{
-				// Detect invalid FASTQ files
-				if(!fastqPreview[i].match(/^@/) || fastqPreview[i+1].length != fastqPreview[i+3].length)
-				{
-					isValid = false;
-					fastqValidate(_allFiles, _callback, _i + 1, isValid);
-					return;
-				}
-
-				// Keep track of FASTQ information
-				var seq = fastqPreview[i+1],
-					qual= fastqPreview[i+3];
-				for(var j = 0; j < seq.length; j++)
-				{
-					if(!(j in fastqInfo)) {
-						fastqInfo[j] = {};
-						fastqQual[j] = {};
-					}
-					if(!(seq[j] in fastqInfo[j])) {
-						fastqInfo[j] = { A:0, C:0, G:0, T:0, N:0 };
-						fastqQual[j] = { tot:0, n:0 };
-					}
-
-					// Keep track of number of bases of this kind at current read position
-					fastqInfo[j][ seq[j] ]++;
-					// Add up all quality scores at this position
-					fastqQual[j].tot += qual[j].charCodeAt() - _fastqPhred;
-					fastqQual[j].n   ++;
-				}
-			}
-
-			// Calculate FASTQ statistics
-			var fastqStats = [];
-			for(var i = 0; i < fastqInfo.length; i++)
-			{
-				fastqStats[i] = {
-					gc   : (fastqInfo[i]["G"]+fastqInfo[i]["C"]) / (fastqInfo[i]["A"]+fastqInfo[i]["C"]+fastqInfo[i]["G"]+fastqInfo[i]["T"]),
-					qual : fastqQual[i].tot / fastqQual[i].n
-				};
-			}
-			console.log("Done with file " + _i + ": " + nbLines + " lines");
-
-			// Proceed to next FASTQ file
-			fastqValidate(_allFiles, _callback, _i + 1, isValid);
-			return;
-		}
-	}
-}
 
 // ---- https://github.com/nodeca/pako/blob/master/dist/pako.min.js ----
 /* pako 1.0.5 nodeca/pako */
