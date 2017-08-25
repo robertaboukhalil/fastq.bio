@@ -63,8 +63,8 @@ var FASTQ = (function()
 		_fastqBytes  = 1024 * 5,
 		_fastqLines  = 40,
 		_fastqPhred  = 33,
-		_fastqPtr    = {}; // pointer to current byte position; key = file name
-
+		_fastqPtr    = {}, // pointer to current byte position; key = filename
+		_fastqStats  = {}; // stats; key = filename
 
 	// =========================================================================
 	// Validate a FASTQ file
@@ -94,7 +94,7 @@ var FASTQ = (function()
 	// =========================================================================
 
 	// Parse a FASTQ chunk
-	function parseChunk(file, reader)
+	function parseChunk(file, reader, statsCurr)
 	{
 		var chunk   = reader.result,
 			nbLines = _fastqLines,
@@ -133,9 +133,13 @@ var FASTQ = (function()
 			for(var j = 0; j < seq.length; j++)
 			{
 				// Initialize stats
-				if(i == 0) {
-					stats.info[j] = { A:0, C:0, G:0, T:0, N:0 };
-					stats.qual[j] = { tot:0, n:0 };
+				if(i == 0)
+				{
+					if(statsCurr == null) {
+						stats.info[j] = { A:0, C:0, G:0, T:0, N:0 };
+						stats.qual[j] = { tot:0, n:0 };
+					} else
+						stats = statsCurr
 				}
 
 				// Keep track of number of bases of this kind at current read position
@@ -179,8 +183,10 @@ var FASTQ = (function()
 	function getNextChunk(file)
 	{
 		// 
-		if(!(file.name in _fastqPtr))
+		if(!(file.name in _fastqPtr)) {
 			_fastqPtr[file.name] = 0;
+			_fastqStats[file.name] = null;
+		}
 
 		// 
 		var reader   = new FileReader(),
@@ -198,9 +204,9 @@ var FASTQ = (function()
 		reader.readAsBinaryString(file.slice(startPos, endPos));
 		reader.onload = function(e)
 		{
-			var chunkStats = parseChunk(file, reader);
+			_fastqStats[file.name] = parseChunk(file, reader, _fastqStats[file.name]);
 
-console.log(chunkStats)
+			console.log(_fastqStats)
 
 			// // Calculate FASTQ statistics
 			// var fastqStats = [];
