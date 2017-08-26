@@ -9,7 +9,12 @@
 
 <input id="readMore0" type="button" value="Read more from file 0">
 
+<br />
+<div id="plot-per-base-sequence-content" style="width:50%; float:left"></div>
+<div id="plot-per-base-sequence-quality" style="width:50%; float:left"></div>
 
+
+<script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
 <script type="text/javascript">
 
 // -> Drag and drop files: highlight window
@@ -60,8 +65,8 @@ document.querySelector("#readMore0").addEventListener("click", function()
 var FASTQ = (function()
 {
 	var _fastqRegex  = /.fastq|.fq|.fastq.gz|.fq.gz/,
-		_fastqBytes  = 1024 * 5,
-		_fastqLines  = 40,
+		_fastqBytes  = 1024 * 50,
+		_fastqLines  = 400,
 		_fastqPhred  = 33,
 		_fastqPtr    = {}, // pointer to current byte position; key = filename
 		_fastqStats  = {}; // stats; key = filename
@@ -99,7 +104,8 @@ var FASTQ = (function()
 		var chunk   = reader.result,
 			nbLines = _fastqLines,
 			stats   = { info: [], qual: [] },
-			isGzip  = file.name.match(/.gz$/);
+			isGzip  = file.name.match(/.gz$/),
+			returnFailed = _fastqStats[file.name];
 
 		// Unzip FASTQ chunk
 		if(isGzip) 
@@ -114,7 +120,7 @@ var FASTQ = (function()
 		// Need at least 4 lines... otherwise skip this file
 		if(nbLines < 4) {
 			_fastqPtr[file.name] = -1;
-			return;
+			return returnFailed;
 		}
 
 		// Validate FASTQ:
@@ -125,7 +131,7 @@ var FASTQ = (function()
 			// Detect invalid FASTQ chunk
 			if(!chunk[i].match(/^@/) || chunk[i+1].length != chunk[i+3].length) {
 				_fastqPtr[file.name] = -1;
-				return;
+				return returnFailed;
 			}
 
 			// Keep track of FASTQ information
@@ -137,7 +143,8 @@ var FASTQ = (function()
 				{
 					if(statsCurr == null) {
 						stats.info[j] = { A:0, C:0, G:0, T:0, N:0 };
-						stats.qual[j] = { tot:0, n:0 };
+						// stats.qual[j] = { tot:0, n:0 };
+						stats.qual[j] = [];
 					} else
 						stats = statsCurr
 				}
@@ -145,8 +152,9 @@ var FASTQ = (function()
 				// Keep track of number of bases of this kind at current read position
 				stats.info[j][ seq[j] ]++;
 				// Add up all quality scores at this position
-				stats.qual[j].tot += qual[j].charCodeAt() - _fastqPhred;
-				stats.qual[j].n   ++;
+				// stats.qual[j].tot += qual[j].charCodeAt() - _fastqPhred;
+				// stats.qual[j].n   ++;
+				stats.qual[j].push( qual[j].charCodeAt() - _fastqPhred )
 			}
 		}
 
@@ -208,17 +216,43 @@ var FASTQ = (function()
 
 			console.log(_fastqStats)
 
-			// // Calculate FASTQ statistics
-			// var fastqStats = [];
-			// for(var i = 0; i < fastqInfo.length; i++)
-			// {
-			// 	fastqStats[i] = {
-			// 		gc   : (fastqInfo[i]["G"]+fastqInfo[i]["C"]) / (fastqInfo[i]["A"]+fastqInfo[i]["C"]+fastqInfo[i]["G"]+fastqInfo[i]["T"]),
-			// 		qual : fastqQual[i].tot / fastqQual[i].n
-			// 	};
-			// }
-			// // console.log("Done with file " + _i + ": " + nbLines + " lines");
+			// Calculate FASTQ statistics
+			var fastqStats = [];
+			var fastqInfo  = _fastqStats[file.name].info;
+			var fastqQual  = _fastqStats[file.name].qual;
+			for(var i = 0; i < fastqInfo.length; i++)
+			{
+				var totBases = fastqInfo[i]["A"] + fastqInfo[i]["C"] + fastqInfo[i]["G"] + fastqInfo[i]["T"];
+				fastqStats[i] = {
+					gc   : (fastqInfo[i]["G"]+fastqInfo[i]["C"]) / totBases,
+					a    : fastqInfo[i]["A"] / totBases,
+					c    : fastqInfo[i]["C"] / totBases,
+					g    : fastqInfo[i]["G"] / totBases,
+					t    : fastqInfo[i]["T"] / totBases,
+					// qual : fastqQual[i].tot / fastqQual[i].n
+				};
+			}
+			console.log(fastqQual[0])
+			// console.log("Done with file " + _i + ": " + nbLines + " lines");
 
+			Plotly.newPlot('plot-per-base-sequence-content', [
+				{ y: fastqStats.map(function(x){ return x.a }), name: 'a' },
+				{ y: fastqStats.map(function(x){ return x.c }), name: 'c' },
+				{ y: fastqStats.map(function(x){ return x.g }), name: 'g' },
+				{ y: fastqStats.map(function(x){ return x.t }), name: 't' },
+			]);
+
+// console.log(fastqStats[0])
+			Plotly.newPlot('plot-per-base-sequence-quality', [
+				{
+					y: fastqQual[0], //fastqStats[0],
+					type: 'box'
+				}
+			]);
+
+			// Plotly.newPlot('plot-per-base-sequence-quality', [
+			// 	{ y: fastqStats.map(function(x){ return x.qual }), name: 'Quality' }
+			// ]);
 
 			// console.log("--> " + file.name)
 
