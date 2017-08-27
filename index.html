@@ -1,13 +1,10 @@
 <meta content="text/html;charset=utf-8" http-equiv="Content-Type">
 <meta content="utf-8" http-equiv="encoding">
 
+<!-- <input id="upload" type="file" multiple directory webkitdirectory allowdirs> -->
+<input id="upload" type="file">
 
-
-
-<input id="upload" type="file" multiple directory webkitdirectory allowdirs>
-
-
-<input id="readMore0" type="button" value="Read more from file 0">
+<input id="readMore" type="button" value="Read more" disabled="disabled">
 
 <br />
 <div id="plot-per-base-sequence-content" style="width:50%; float:left"></div>
@@ -19,45 +16,34 @@
 
 // -> Drag and drop files: highlight window
 // -> Btn to upload folder vs. upload files
-// -> Upload multiple FASTQs
 // -> One tab per FASTQ; sample Nreads / Nfiles reads by default
 // -> Update plots as sample more data from file
 // -> Allow user to increase #reads sampled
+
+// -> Upload multiple FASTQs
 
 var FILES = {};
 
 document.querySelector("#upload").addEventListener("change", function()
 {
-	var tStart = Date.now();
+	FILES = this.files;
 
-	// fastqValidate(this.files, function(data)
-	// {
-	// 	console.log("DONE: " + (Date.now() - tStart) + " ms")
-	// 	console.log(data)
-	// });
-
-	FILES = this.files
-
-	for(var i = 0; i < FILES.length; i++)
+	if(!FASTQ.isValidFileName(FILES[0]))
 	{
-		var file = FILES[i];
-
-		// Skip files that aren't .fastq, .fq, .gz
-		if(!FASTQ.isValidFileName(file))
-			continue;
-
-		console.log(FILES[i].name)
-		// console.log(FASTQ.isValidChunk(file))
-		// console.log("------")
-		// console.log(FASTQ.isValidChunk(file))
+		alert("Error: please choose a FASTQ file.");
+		return;
 	}
 
+
+	document.querySelector("#readMore").disabled = false;
+	FASTQ.getNextChunk( FILES[0] );
 });
 
 
-document.querySelector("#readMore0").addEventListener("click", function()
+document.querySelector("#readMore").addEventListener("click", function()
 {
-	FASTQ.getNextChunk( FILES[1] )
+	if(FILES[0] != null)
+		FASTQ.getNextChunk( FILES[0] )
 })
 
 
@@ -65,8 +51,8 @@ document.querySelector("#readMore0").addEventListener("click", function()
 var FASTQ = (function()
 {
 	var _fastqRegex  = /.fastq|.fq|.fastq.gz|.fq.gz/,
-		_fastqBytes  = 1024 * 50,
-		_fastqLines  = 400,
+		_fastqBytes  = 1024 * 5,
+		_fastqLines  = 100,
 		_fastqPhred  = 33,
 		_fastqPtr    = {}, // pointer to current byte position; key = filename
 		_fastqStats  = {}; // stats; key = filename
@@ -128,8 +114,11 @@ var FASTQ = (function()
 		// - Sequence and qual lines must be of equal lengths
 		for(var i = 0; i < nbLines; i += 4)
 		{
+
 			// Detect invalid FASTQ chunk
-			if(!chunk[i].match(/^@/) || chunk[i+1].length != chunk[i+3].length) {
+			if(!chunk[i].match(/^@/) || chunk[i+1].length != chunk[i+3].length)
+			{
+				console.log("Invalid FASTQ chunk")
 				_fastqPtr[file.name] = -1;
 				return returnFailed;
 			}
@@ -143,8 +132,8 @@ var FASTQ = (function()
 				{
 					if(statsCurr == null) {
 						stats.info[j] = { A:0, C:0, G:0, T:0, N:0 };
-						// stats.qual[j] = { tot:0, n:0 };
-						stats.qual[j] = [];
+						stats.qual[j] = { tot:0, n:0 };
+						// stats.qual[j] = [];
 					} else
 						stats = statsCurr
 				}
@@ -152,9 +141,9 @@ var FASTQ = (function()
 				// Keep track of number of bases of this kind at current read position
 				stats.info[j][ seq[j] ]++;
 				// Add up all quality scores at this position
-				// stats.qual[j].tot += qual[j].charCodeAt() - _fastqPhred;
-				// stats.qual[j].n   ++;
-				stats.qual[j].push( qual[j].charCodeAt() - _fastqPhred )
+				stats.qual[j].tot += qual[j].charCodeAt() - _fastqPhred;
+				stats.qual[j].n   ++;
+				// stats.qual[j].push( qual[j].charCodeAt() - _fastqPhred )
 			}
 		}
 
@@ -202,19 +191,16 @@ var FASTQ = (function()
 			endPos   = Math.min(startPos + _fastqBytes, file.size);
 
 		// Disable button
-		// TODO: ?
+		document.querySelector("#readMore").disabled = true;
+
 		// Keep it disabled if done reading file
 		if(startPos >= endPos || startPos == -1 || endPos == -1)
 			return;
-		// Undisable button
-		// TODO: ?
 
 		reader.readAsBinaryString(file.slice(startPos, endPos));
 		reader.onload = function(e)
 		{
 			_fastqStats[file.name] = parseChunk(file, reader, _fastqStats[file.name]);
-
-			console.log(_fastqStats)
 
 			// Calculate FASTQ statistics
 			var fastqStats = [];
@@ -229,43 +215,48 @@ var FASTQ = (function()
 					c    : fastqInfo[i]["C"] / totBases,
 					g    : fastqInfo[i]["G"] / totBases,
 					t    : fastqInfo[i]["T"] / totBases,
-					// qual : fastqQual[i].tot / fastqQual[i].n
+					qual : fastqQual[i].tot / fastqQual[i].n
 				};
 			}
-			console.log(fastqQual[0])
-			// console.log("Done with file " + _i + ": " + nbLines + " lines");
 
-			Plotly.newPlot('plot-per-base-sequence-content', [
-				{ y: fastqStats.map(function(x){ return x.a }), name: 'a' },
-				{ y: fastqStats.map(function(x){ return x.c }), name: 'c' },
-				{ y: fastqStats.map(function(x){ return x.g }), name: 'g' },
-				{ y: fastqStats.map(function(x){ return x.t }), name: 't' },
-			]);
+			plotStats(fastqStats);
 
-// console.log(fastqStats[0])
-			Plotly.newPlot('plot-per-base-sequence-quality', [
-				{
-					y: fastqQual[0], //fastqStats[0],
-					type: 'box'
-				}
-			]);
-
-			// Plotly.newPlot('plot-per-base-sequence-quality', [
-			// 	{ y: fastqStats.map(function(x){ return x.qual }), name: 'Quality' }
-			// ]);
-
-			// console.log("--> " + file.name)
-
-			// // Proceed to next FASTQ file
-			// fastqValidate(_allFiles, _callback, _i + 1, isValid);
-			// return;
-
-
-
-			// TODO: reset pos to last byte of valid fastq line
-
-			// _fastqPtr[file.name] = endPos;
+			// Undisable button
+			document.querySelector("#readMore").disabled = false;
 		}
+	}
+
+	function plotStats(fastqStats)
+	{
+		//
+		Plotly.newPlot('plot-per-base-sequence-content', [
+			{ y: fastqStats.map(function(x){ return x.a }), name: 'a' },
+			{ y: fastqStats.map(function(x){ return x.t }), name: 't' },
+			{ y: fastqStats.map(function(x){ return x.g }), name: 'g' },
+			{ y: fastqStats.map(function(x){ return x.c }), name: 'c' },
+		]);
+
+		// //
+		// Plotly.newPlot('plot-per-base-sequence-quality', [
+			// { y: fastqStats.map(function(x){ return x.qual }) }
+		// ], { showlegend: false });
+
+		Plotly.newPlot('plot-per-base-sequence-quality', [
+			{
+				x: fastqStats.map(function(x){ return x.gc }),
+				type: 'histogram',
+				xbins: {
+					start: 0,
+					end: 1, 
+					size: 0.01,
+				}
+			}
+		], { showlegend: false });
+
+		// Plotly.newPlot('plot-per-base-sequence-quality', [{
+		// 		y: fastqQual[0], //fastqStats[0],
+		// 		type: 'box'
+		// }]);
 	}
 
 	return {
