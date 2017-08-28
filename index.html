@@ -33,20 +33,28 @@
 	<body>
 		<!-- Header -->
 		<nav class="navbar navbar-toggleable-md navbar-inverse bg-inverse mb-0">
-			<a class="navbar-brand" href="#">fastq.bio</a>
+			<a class="navbar-brand" href=".">fastq.bio</a>
 			<div class="spinner" style="display:none"></div>
 			<div style="margin-left:25px; display:none">
-				<button class="btnNewFile btn btn-primary btn-sm my-2 my-sm-0" type="button">New File</button>
+				<button class="btnNewFile btn btn-primary btn-sm my-2 my-sm-0" role="button">New File</button>
 			</div>
 		</nav>
 
 		<!-- Container -->
 		<div class="container" style="margin:0; padding:0; width:100%;">
-			<div class="jumbotron" style="text-align:center; border-radius:0">
+			<div class="containerMain jumbotron" style="text-align:center; border-radius:0">
 				<h2>Preview your FASTQ file</h2>
 				<br>
 				<!-- <p class="lead"></p> -->
-				<a class="btnNewFile btn btn-lg btn-primary" href="#" role="button">Choose FASTQ File</a>
+				<button class="btnNewFile btn btn-lg btn-primary" role="button">Choose FASTQ File</button>
+				<input id="upload" type="file" style="display:none">
+			</div>
+			<div class="containerPreview jumbotron" style="text-align:center; border-radius:0; display:none">
+				<!-- <h2>ABC</h2> -->
+				<!-- <br> -->
+				<div id="plot-per-base-sequence-content" style="width:50%; float:left"></div>
+				<div id="plot-per-base-sequence-quality" style="width:50%; float:left"></div>
+				<br style="clear:both">
 			</div>
 		</div>
 
@@ -54,11 +62,12 @@
 		======================================================================== -->
 		<!-- Bootstrap / JQuery -->
 		<script src="assets/jquery/jquery-3.1.1.slim.min.js"></script>
+		<script src="assets/bootstrap/tether_1.4.0_js_tether.min.js"></script>
 		<script src="assets/bootstrap/bootstrap.min.js"></script>
 		<script src="assets/ie10-viewport-bug-workaround.js"></script>
 		<!-- Plotly -->
 		<script src="assets/plotly/plotly-latest.min.js"></script>
-
+		<!-- App -->
 		<script type="text/javascript">
 		// -> https://developer.mozilla.org/en-US/docs/Web/API/FileReader/readAsDataURL
 		// -> Drag and drop files: highlight window
@@ -71,9 +80,14 @@
 		//    - <input id="upload" type="file" multiple directory webkitdirectory allowdirs>
 
 		var FILES = {};
+		var arrEl = document.querySelectorAll(".btnNewFile");
+		for(var i = 0; i < arrEl.length; i++)
+			arrEl[i].addEventListener("click", function(){
+				document.querySelector("#upload").click();
+			});
 
-		document.querySelector("#upload").addEventListener("change", function()
-		{
+		//
+		document.querySelector("#upload").addEventListener("change", function(){
 			FILES = this.files;
 			launch();
 		});
@@ -90,34 +104,54 @@
 			{
 				FASTQ.getNextChunk(FILES[0], 10, {
 					preread: function() {
-						document.querySelector(".loading-circle").style.display = "block";
+						document.querySelector(".spinner").style.display = "block";
+						document.querySelector(".containerMain").style.display = "none";
+						document.querySelector(".containerPreview").style.display = "block";
 					},
 					postread: function(fastqStats) {
 						plotStats(fastqStats);
 						launch();
 					},
 					lastread: function() {
-						document.querySelector(".loading-circle").style.display = "none";
+						document.querySelector(".spinner").style.display = "none";
 					}
 				});
 			}, 500);
 		}
 
-
+		//
 		function plotStats(fastqStats)
 		{
+			//
+			var plotlyConfig = {
+				modeBarButtonsToRemove: ['sendDataToCloud', 'autoScale2d', 'hoverClosestCartesian', 'hoverCompareCartesian', 'lasso2d', 'select2d', 'zoom2d', 'pan2d', 'zoomIn2d', 'zoomOut2d', 'resetScale2d', 'toggleSpikelines'],
+				displaylogo: false, showTips: true
+			};
+
+			//
+			var nbReads = Math.round(fastqStats.reads / 1000);
+
 			//
 			Plotly.newPlot('plot-per-base-sequence-content', [
 				{ y: fastqStats.seq.map(function(x){ return x.a }), name: 'a' },
 				{ y: fastqStats.seq.map(function(x){ return x.t }), name: 't' },
 				{ y: fastqStats.seq.map(function(x){ return x.g }), name: 'g' },
 				{ y: fastqStats.seq.map(function(x){ return x.c }), name: 'c' },
-			]);
+			], {
+				title: "Per Base Sequence Content<br><i>Sampled first " + nbReads + "K reads</i>",
+				xaxis: { title: "Read Position" },
+				yaxis: { title: "Composition" },
+			}, plotlyConfig);
 
 			//
 			Plotly.newPlot('plot-per-base-sequence-quality', [
 				{ y: fastqStats.seq.map(function(x){ return x.qual }) }
-			], { showlegend: false });
+			], {
+				title: "Per Base Sequence Quality<br><i>Sampled first " + nbReads + "K reads</i>",
+				xaxis: { title: "Read Position" },
+				yaxis: { title: "Base Quality" },
+				showlegend: false
+			}, plotlyConfig);
 
 			// Plotly.newPlot('plot-per-base-sequence-quality', [
 			// 	{
@@ -222,7 +256,11 @@
 					_fastqStats[file.name] = parseChunk(file, reader, _fastqStats[file.name]);
 
 					// Calculate FASTQ statistics
-					var fastqStats = { seq: [], gc: _fastqStats[file.name].gc };
+					var fastqStats = {
+						seq   : [],
+						gc    : _fastqStats[file.name].gc,
+						reads : _fastqStats[file.name].reads
+					};
 					var fastqInfo  = _fastqStats[file.name].info;
 					var fastqQual  = _fastqStats[file.name].qual;
 					for(var i = 0; i < fastqInfo.length; i++)
