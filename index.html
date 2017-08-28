@@ -35,7 +35,7 @@
 		<nav class="navbar navbar-toggleable-md navbar-inverse bg-inverse mb-0">
 			<a class="navbar-brand" href=".">fastq.bio</a>
 			<div class="spinner" style="display:none"></div>
-			<div style="margin-left:25px; display:none">
+			<div id="headerBtnNewFile" style="margin-left:25px; display:none">
 				<button class="btnNewFile btn btn-primary btn-sm my-2 my-sm-0" role="button">New File</button>
 			</div>
 		</nav>
@@ -107,6 +107,8 @@
 						document.querySelector(".spinner").style.display = "block";
 						document.querySelector(".containerMain").style.display = "none";
 						document.querySelector(".containerPreview").style.display = "block";
+						document.querySelector("#headerBtnNewFile").style.display = "none";
+						document.querySelector("#headerBtnNewFile").disabled = true;
 					},
 					postread: function(fastqStats) {
 						plotStats(fastqStats);
@@ -114,6 +116,8 @@
 					},
 					lastread: function() {
 						document.querySelector(".spinner").style.display = "none";
+						document.querySelector("#headerBtnNewFile").style.display = "block";
+						document.querySelector("#headerBtnNewFile").disabled = false;
 					}
 				});
 			}, 500);
