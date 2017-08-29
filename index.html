@@ -140,6 +140,32 @@
 				displaylogo: false, showTips: true
 			};
 
+			// Calculate FASTQ statistics
+			// var fastqStats = _fastqStats[file.name];
+			// var fastqStats = {
+			// 	seq   : [],
+			// 	gc    : _fastqStats[file.name].gc,
+			// 	reads : _fastqStats[file.name].reads,
+			// 	seqlength: _fastqStats[file.name].seqlength
+			// };
+			fastqStats.seq = [];
+			var fastqInfo  = _fastqStats[file.name].info;
+			var fastqQual  = _fastqStats[file.name].qual;
+			for(var i = 0; i < fastqInfo.length; i++)
+			{
+				var totBases = fastqInfo[i]["A"] + fastqInfo[i]["C"] + fastqInfo[i]["G"] + fastqInfo[i]["T"];
+				fastqStats.seq[i] = {
+					// gc   : (fastqInfo[i]["G"]+fastqInfo[i]["C"]) / totBases,
+					a    : fastqInfo[i]["A"] / totBases,
+					c    : fastqInfo[i]["C"] / totBases,
+					g    : fastqInfo[i]["G"] / totBases,
+					t    : fastqInfo[i]["T"] / totBases,
+					qual : fastqQual[i].tot / fastqQual[i].n
+				};
+			}
+
+
+
 			//
 			var nbReads = Math.round(fastqStats.reads / 1000);
 
@@ -279,43 +305,34 @@
 				reader.readAsBinaryString(file.slice(startPos, endPos));
 				reader.onload = function(e)
 				{
-					_fastqStats[file.name] = parseChunk(file, reader, _fastqStats[file.name]);
-
-					// Calculate FASTQ statistics
-					var fastqStats = {
-						seq   : [],
-						gc    : _fastqStats[file.name].gc,
-						reads : _fastqStats[file.name].reads,
-						seqlength: _fastqStats[file.name].seqlength
-					};
-					var fastqInfo  = _fastqStats[file.name].info;
-					var fastqQual  = _fastqStats[file.name].qual;
-					for(var i = 0; i < fastqInfo.length; i++)
-					{
-						var totBases = fastqInfo[i]["A"] + fastqInfo[i]["C"] + fastqInfo[i]["G"] + fastqInfo[i]["T"];
-						fastqStats.seq[i] = {
-							// gc   : (fastqInfo[i]["G"]+fastqInfo[i]["C"]) / totBases,
-							a    : fastqInfo[i]["A"] / totBases,
-							c    : fastqInfo[i]["C"] / totBases,
-							g    : fastqInfo[i]["G"] / totBases,
-							t    : fastqInfo[i]["T"] / totBases,
-							qual : fastqQual[i].tot / fastqQual[i].n
-						};
-					}
+					// _fastqStats[file.name] = 
+					parseChunk(file, reader); //, _fastqStats[file.name]);
 
 					if("postread" in callbacks)
-						callbacks["postread"](fastqStats);
+						callbacks["postread"](_fastqStats[file.name]);
 				}
 			}
 
 			// Parse a FASTQ chunk
-			function parseChunk(file, reader, statsCurr)
+			function parseChunk(file, reader)
 			{
-				var chunk   = reader.result,
-					nbLines = _fastqLines,
-					stats   = { info: [], qual: [], gc: [], reads: 0, seqlength: [] },
-					isGzip  = file.name.match(/.gz$/),
-					returnFailed = _fastqStats[file.name];
+				var stats	  = {},
+					chunk     = reader.result,
+					nbLines   = _fastqLines,
+					isGzip    = file.name.match(/.gz$/),
+					statsCurr = _fastqStats[file.name];
+
+				// Load previous stats if present
+				if(statsCurr == null)
+					stats = {
+						gc        : [],
+						info      : [],
+						qual      : [],
+						reads     : 0,
+						seqlength : []
+					};
+				else
+					stats = statsCurr;
 
 				// Unzip FASTQ chunk
 				if(isGzip) 
@@ -330,7 +347,7 @@
 				// Need at least 4 lines... otherwise skip this file
 				if(nbLines < 4) {
 					_fastqPtr[file.name] = -1;
-					return returnFailed;
+					return;
 				}
 
 				// Loop through each FASTQ read
@@ -340,46 +357,46 @@
 					if(isValidChunk(file, [ chunk[0], chunk[1], chunk[2], chunk[3] ])) {
 						console.log("Invalid FASTQ chunk")
 						_fastqPtr[file.name] = -1;
-						return returnFailed;
+						return;
 					}
 
-					// Keep track of FASTQ information
-					var gcSum = 0, gcTot = 0;
-					var seq = chunk[i+1], qual = chunk[i+3];
+					// Get current read's sequence and quality score lines
+					var seq  = chunk[i+1],
+						qual = chunk[i+3];
 
-					// Keep track of number of reads
+					// Keep track of number of reads and sequence lengths
 					stats.reads++;
-					stats.seqlength.push(chunk[i+1].length);
+					stats.seqlength.push(seq.length);
 
 					// Loop through each sequence character
+					var gcSum = 0, gcTot = 0;
 					for(var j = 0; j < seq.length; j++)
 					{
 						// Initialize stats
 						if(i == 0)
 						{
-							if(statsCurr == null) {
+							if(stats.info[j] == null) {
 								stats.info[j] = { A:0, C:0, G:0, T:0, N:0 };
-								stats.qual[j] = { tot:0, n:0 };
-								if(j == 0)
-									stats.gc = [];
-								// stats.qual[j] = [];
-							} else
-								stats = statsCurr
+								// stats.qual[j] = { tot:0, n:0 };
+								stats.qual[j] = [];
+							}
 						}
 
 						// Keep track of number of bases of this kind at current read position
 						stats.info[j][ seq[j] ]++;
 						// Add up all quality scores at this position
-						stats.qual[j].tot += qual[j].charCodeAt() - _fastqPhred;
-						stats.qual[j].n   ++;
-						// stats.qual[j].push( qual[j].charCodeAt() - _fastqPhred )
+						// stats.qual[j].tot += qual[j].charCodeAt() - _fastqPhred;
+						// stats.qual[j].n   ++;
+						stats.qual[j].push( qual[j].charCodeAt() - _fastqPhred )
 
 						gcSum += stats.info[j].G + stats.info[j].C;
 						gcTot += stats.info[j].A + stats.info[j].C + stats.info[j].G + stats.info[j].T;
 					}
 
-					stats.gc.push(gcSum / gcTot);
+					stats.gc.push(parseInt(Math.round(gcSum / gcTot * 100)));
 				}
+
+				// Increment # reads processed
 				console.log("Read " + nbLines + "lines -- " + stats.reads + " reads total")
 
 				// Keep track of nb bytes read
@@ -408,7 +425,10 @@
 				// } else
 				// 	_fastqPtr[file.name] += bytesRead;
 
-				return stats;
+				// Update stats
+				_fastqStats[file.name] = stats;
+
+				return true;
 			}
 
 			return {
