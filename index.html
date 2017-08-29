@@ -41,7 +41,7 @@
 		</nav>
 
 		<!-- Container -->
-		<div class="container" style="margin:0; padding:0; width:100%;">
+		<div class="container" style="margin:0; padding:0; width:100%">
 			<div class="containerMain jumbotron" style="text-align:center; border-radius:0">
 				<h2>Preview your FASTQ file</h2>
 				<br>
@@ -49,11 +49,19 @@
 				<button class="btnNewFile btn btn-lg btn-primary" role="button">Choose FASTQ File</button>
 				<input id="upload" type="file" style="display:none">
 			</div>
-			<div class="containerPreview jumbotron" style="text-align:center; border-radius:0; display:none">
+			<div class="containerPreview jumbotron" style="text-align:center; border-radius:0; display:none; padding:5px 0 0 5px">
 				<!-- <h2>ABC</h2> -->
 				<!-- <br> -->
-				<div id="plot-per-base-sequence-content" style="width:50%; float:left"></div>
-				<div id="plot-per-base-sequence-quality" style="width:50%; float:left"></div>
+				<div id="plot-per-base-sequence-content" style="width:33%; height:325px; float:left;"></div>
+				<div style="max-width:3%; float:left;">&nbsp;</div>
+				<div id="plot-per-base-sequence-quality" style="width:33%; height:325px; float:left;"></div>
+				<div style="max-width:3%; float:left;">&nbsp;</div>
+				<div id="plot-seq-length-histo" style="width:33%; height:325px; float:left;"></div>
+
+				<br style="clear:both">
+				<div id="plot-per-base-sequence-content" style="width:33%; height:325px; margin-top:-15px; float:left"></div>
+				<div style="width:33%; height:350px; float:left">&nbsp;</div>
+				<div id="plot-per-base-sequence-content" style="width:33%; height:325px; margin-top:-15px; float:left"></div>
 				<br style="clear:both">
 			</div>
 		</div>
@@ -156,6 +164,20 @@
 				yaxis: { title: "Base Quality" },
 				showlegend: false
 			}, plotlyConfig);
+
+			//
+			Plotly.newPlot('plot-seq-length-histo', [
+				{
+					x: fastqStats.seqlength,
+					type: 'histogram'
+				}
+			], {
+				title: "Sequence Length Distribution<br><i>Sampled first " + nbReads + "K reads</i>",
+				xaxis: { title: "Sequence Length" },
+				yaxis: { title: "Counts" },
+				showlegend: false
+			}, plotlyConfig);
+
 
 			// Plotly.newPlot('plot-per-base-sequence-quality', [
 			// 	{
@@ -263,7 +285,8 @@
 					var fastqStats = {
 						seq   : [],
 						gc    : _fastqStats[file.name].gc,
-						reads : _fastqStats[file.name].reads
+						reads : _fastqStats[file.name].reads,
+						seqlength: _fastqStats[file.name].seqlength
 					};
 					var fastqInfo  = _fastqStats[file.name].info;
 					var fastqQual  = _fastqStats[file.name].qual;
@@ -290,7 +313,7 @@
 			{
 				var chunk   = reader.result,
 					nbLines = _fastqLines,
-					stats   = { info: [], qual: [], gc: [], reads: 0 },
+					stats   = { info: [], qual: [], gc: [], reads: 0, seqlength: [] },
 					isGzip  = file.name.match(/.gz$/),
 					returnFailed = _fastqStats[file.name];
 
@@ -320,12 +343,15 @@
 						return returnFailed;
 					}
 
-					// Keep track of number of reads
-					stats.reads++;
-
 					// Keep track of FASTQ information
 					var gcSum = 0, gcTot = 0;
 					var seq = chunk[i+1], qual = chunk[i+3];
+
+					// Keep track of number of reads
+					stats.reads++;
+					stats.seqlength.push(chunk[i+1].length);
+
+					// Loop through each sequence character
 					for(var j = 0; j < seq.length; j++)
 					{
 						// Initialize stats
