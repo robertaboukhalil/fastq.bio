@@ -56,7 +56,7 @@
 				<div style="max-width:3%; float:left;">&nbsp;</div>
 				<div id="plot-per-base-sequence-quality" style="width:33%; height:325px; float:left;"></div>
 				<div style="max-width:3%; float:left;">&nbsp;</div>
-				<div id="" style="width:33%; height:325px; float:left;"></div>
+				<div id="plot-per-base-N-content" style="width:33%; height:325px; float:left;"></div>
 
 				<br style="clear:both">
 				<div id="plot-dist-gc-content-per-read" style="width:33%; height:325px; float:left; margin-top:5px"></div>
@@ -149,7 +149,7 @@
 			// Number of reads
 			var nbReads = Math.round(fastqStats.reads / 1000);
 			// Calculate sequence content per base as function of position
-			var seqContents = { A:[], C:[], G:[], T:[], GC: [] };
+			var seqContents = { A:[], C:[], G:[], T:[], N: [] };
 			fastqStats.nucl.map(function(cnt, i)
 			{
 				var totBases = cnt.A + cnt.C + cnt.G + cnt.T;
@@ -157,13 +157,13 @@
 				seqContents.C[i] = Math.round(cnt.C / totBases * 1000) / 1000;
 				seqContents.G[i] = Math.round(cnt.G / totBases * 1000) / 1000;
 				seqContents.T[i] = Math.round(cnt.T / totBases * 1000) / 1000;
+				seqContents.N[i] = Math.round(cnt.N / totBases * 1000) / 1000;
 			});
 			// Calculate average base quality as function of position
 			var seqQuality = [];
 			fastqStats.qual.map(function(qualities, i) {
 				seqQuality[i] = qualities.reduce(function(x,y){ return x+y; }) / qualities.length;
 			});
-
 
 			// -- Plots
 			// Plot sequence content as function of position
@@ -186,6 +186,15 @@
 				xaxis: { title: "Read Position" },
 				yaxis: { title: "Base Quality" },
 				showlegend: false
+			}, plotlyConfig);
+
+			// Plot N's as function of position
+			Plotly.newPlot('plot-per-base-N-content', [
+				{ y: seqContents.N, name: 'N' }
+			], {
+				title: "Per Base N Content<br><i>Sampled first " + nbReads + "K reads</i>",
+				xaxis: { title: "Read Position" },
+				yaxis: { title: "Frequency", range: [0, 1] },
 			}, plotlyConfig);
 
 			// Plot histogram of average GC content per read
@@ -385,7 +394,7 @@
 							}
 						}
 
-						// 
+						// Get current base nucleotide + quality score
 						var currNucleotide = seq[j],
 							currQualScore  = qual[j].charCodeAt() - _fastqPhred;
 
@@ -396,7 +405,7 @@
 						// Keep track of average GC content per read
 						gcSum += (seq[j] == 'C' || seq[j] == 'G') ? 1 : 0;
 						gcTot ++;
-						//
+						// Keep track of average quality score per read
 						qualSum += currQualScore;
 						qualTot ++;
 					}
