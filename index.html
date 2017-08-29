@@ -56,12 +56,16 @@
 				<div style="max-width:3%; float:left;">&nbsp;</div>
 				<div id="plot-per-base-sequence-quality" style="width:33%; height:325px; float:left;"></div>
 				<div style="max-width:3%; float:left;">&nbsp;</div>
-				<div id="plot-seq-length-histo" style="width:33%; height:325px; float:left;"></div>
+				<div id="" style="width:33%; height:325px; float:left;"></div>
 
 				<br style="clear:both">
-				<div id="plot-per-base-sequence-content" style="width:33%; height:325px; margin-top:-15px; float:left"></div>
-				<div style="width:33%; height:350px; float:left">&nbsp;</div>
-				<div id="plot-per-base-sequence-content" style="width:33%; height:325px; margin-top:-15px; float:left"></div>
+				<div id="plot-dist-gc-content-per-read" style="width:33%; height:325px; float:left; margin-top:5px"></div>
+				<div style="max-width:3%; float:left;">&nbsp;</div>
+				<div id="plot-dist-qual-per-read" style="width:33%; height:325px; float:left; margin-top:5px"></div>
+				<div style="max-width:3%; float:left;">&nbsp;</div>
+				<div id="plot-dist-seq-length" style="width:33%; height:325px; float:left; margin-top:5px"></div>
+
+				<br style="clear:both">
 				<br style="clear:both">
 			</div>
 		</div>
@@ -132,6 +136,7 @@
 		}
 
 		//
+		var tmp={};
 		function plotStats(fastqStats)
 		{
 			//
@@ -140,90 +145,87 @@
 				displaylogo: false, showTips: true
 			};
 
-			// Calculate FASTQ statistics
-			// var fastqStats = _fastqStats[file.name];
-			// var fastqStats = {
-			// 	seq   : [],
-			// 	gc    : _fastqStats[file.name].gc,
-			// 	reads : _fastqStats[file.name].reads,
-			// 	seqlength: _fastqStats[file.name].seqlength
-			// };
-			fastqStats.seq = [];
-			var fastqInfo  = _fastqStats[file.name].info;
-			var fastqQual  = _fastqStats[file.name].qual;
-			for(var i = 0; i < fastqInfo.length; i++)
-			{
-				var totBases = fastqInfo[i]["A"] + fastqInfo[i]["C"] + fastqInfo[i]["G"] + fastqInfo[i]["T"];
-				fastqStats.seq[i] = {
-					// gc   : (fastqInfo[i]["G"]+fastqInfo[i]["C"]) / totBases,
-					a    : fastqInfo[i]["A"] / totBases,
-					c    : fastqInfo[i]["C"] / totBases,
-					g    : fastqInfo[i]["G"] / totBases,
-					t    : fastqInfo[i]["T"] / totBases,
-					qual : fastqQual[i].tot / fastqQual[i].n
-				};
-			}
-
-
-
-			//
+			// -- Calculate FASTQ statistics
+			// Number of reads
 			var nbReads = Math.round(fastqStats.reads / 1000);
+			// Calculate sequence content per base as function of position
+			var seqContents = { A:[], C:[], G:[], T:[], GC: [] };
+			fastqStats.nucl.map(function(cnt, i)
+			{
+				var totBases = cnt.A + cnt.C + cnt.G + cnt.T;
+				seqContents.A[i] = Math.round(cnt.A / totBases * 1000) / 1000;
+				seqContents.C[i] = Math.round(cnt.C / totBases * 1000) / 1000;
+				seqContents.G[i] = Math.round(cnt.G / totBases * 1000) / 1000;
+				seqContents.T[i] = Math.round(cnt.T / totBases * 1000) / 1000;
+			});
+			// Calculate average base quality as function of position
+			var seqQuality = [];
+			fastqStats.qual.map(function(qualities, i) {
+				seqQuality[i] = qualities.reduce(function(x,y){ return x+y; }) / qualities.length;
+			});
 
-			//
+
+			// -- Plots
+			// Plot sequence content as function of position
 			Plotly.newPlot('plot-per-base-sequence-content', [
-				{ y: fastqStats.seq.map(function(x){ return x.a }), name: 'a' },
-				{ y: fastqStats.seq.map(function(x){ return x.t }), name: 't' },
-				{ y: fastqStats.seq.map(function(x){ return x.g }), name: 'g' },
-				{ y: fastqStats.seq.map(function(x){ return x.c }), name: 'c' },
+				{ y: seqContents.A, name: 'A' },
+				{ y: seqContents.C, name: 'C' },
+				{ y: seqContents.G, name: 'G' },
+				{ y: seqContents.T, name: 'T' },
 			], {
 				title: "Per Base Sequence Content<br><i>Sampled first " + nbReads + "K reads</i>",
 				xaxis: { title: "Read Position" },
 				yaxis: { title: "Composition" },
 			}, plotlyConfig);
 
-			//
-			Plotly.newPlot('plot-per-base-sequence-quality', [
-				{ y: fastqStats.seq.map(function(x){ return x.qual }) }
-			], {
+			// Plot average base quality as function of position
+			Plotly.newPlot('plot-per-base-sequence-quality', [{
+				y: seqQuality
+			}], {
 				title: "Per Base Sequence Quality<br><i>Sampled first " + nbReads + "K reads</i>",
 				xaxis: { title: "Read Position" },
 				yaxis: { title: "Base Quality" },
 				showlegend: false
 			}, plotlyConfig);
 
-			//
-			Plotly.newPlot('plot-seq-length-histo', [
-				{
-					x: fastqStats.seqlength,
-					type: 'histogram'
-				}
-			], {
+			// Plot histogram of average GC content per read
+			Plotly.newPlot('plot-dist-gc-content-per-read', [{
+				x: fastqStats.avgGC,
+				type: 'histogram',
+				xbins: {
+					start: 0,
+					end: 1, 
+					size: 0.05,
+				},
+			}], {
+				title: "Average GC Content per Read<br><i>Sampled first " + nbReads + "K reads</i>",
+				xaxis: { title: "GC Content" },
+				yaxis: { title: "Counts" },
+				showlegend: false,
+			}, plotlyConfig);
+
+			// Plot histogram of average quality score per read
+			Plotly.newPlot('plot-dist-qual-per-read', [{
+				x: fastqStats.avgQual,
+				type: 'histogram'
+			}], {
+				title: "Average Quality Score per Read<br><i>Sampled first " + nbReads + "K reads</i>",
+				xaxis: { title: "Quality Score" },
+				yaxis: { title: "Counts" },
+				showlegend: false,
+			}, plotlyConfig);
+
+			// Plot histogram of sequence length
+			Plotly.newPlot('plot-dist-seq-length', [{
+				x: fastqStats.seqlen,
+				type: 'histogram'
+			}], {
 				title: "Sequence Length Distribution<br><i>Sampled first " + nbReads + "K reads</i>",
 				xaxis: { title: "Sequence Length" },
 				yaxis: { title: "Counts" },
 				showlegend: false
 			}, plotlyConfig);
 
-
-			// Plotly.newPlot('plot-per-base-sequence-quality', [
-			// 	{
-			// 		x: fastqStats.gc,
-			// 		type: 'histogram',
-			// 		xbins: {
-			// 			start: 0,
-			// 			end: 1, 
-			// 			size: 0.01,
-			// 		},
-			// 	}
-			// ], {
-			// 	showlegend: false,
-			// 	// xaxis: {range: [0, 1]}
-			// });
-
-			// Plotly.newPlot('plot-per-base-sequence-quality', [{
-			// 		y: fastqQual[0], //fastqStats[0],
-			// 		type: 'box'
-			// }]);
 		}
 
 
@@ -325,11 +327,12 @@
 				// Load previous stats if present
 				if(statsCurr == null)
 					stats = {
-						gc        : [],
-						info      : [],
-						qual      : [],
-						reads     : 0,
-						seqlength : []
+						reads   : 0,  // number of reads
+						avgGC   : [], // average GC content per read
+						avgQual : [], // average quality score per read
+						seqlen  : [], // sequence length per read
+						nucl    : [], // for each position, nucleotide content
+						qual    : []  // for each position, base quality
 					};
 				else
 					stats = statsCurr;
@@ -366,34 +369,39 @@
 
 					// Keep track of number of reads and sequence lengths
 					stats.reads++;
-					stats.seqlength.push(seq.length);
+					stats.seqlen.push(seq.length);
 
 					// Loop through each sequence character
-					var gcSum = 0, gcTot = 0;
+					var gcSum   = 0, gcTot   = 0;
+					var qualSum = 0, qualTot = 0;
 					for(var j = 0; j < seq.length; j++)
 					{
 						// Initialize stats
 						if(i == 0)
 						{
-							if(stats.info[j] == null) {
-								stats.info[j] = { A:0, C:0, G:0, T:0, N:0 };
-								// stats.qual[j] = { tot:0, n:0 };
+							if(stats.nucl[j] == null) {
+								stats.nucl[j] = { A:0, C:0, G:0, T:0, N:0 };
 								stats.qual[j] = [];
 							}
 						}
 
+						// 
+						var currNucleotide = seq[j],
+							currQualScore  = qual[j].charCodeAt() - _fastqPhred;
+
 						// Keep track of number of bases of this kind at current read position
-						stats.info[j][ seq[j] ]++;
-						// Add up all quality scores at this position
-						// stats.qual[j].tot += qual[j].charCodeAt() - _fastqPhred;
-						// stats.qual[j].n   ++;
-						stats.qual[j].push( qual[j].charCodeAt() - _fastqPhred )
-
-						gcSum += stats.info[j].G + stats.info[j].C;
-						gcTot += stats.info[j].A + stats.info[j].C + stats.info[j].G + stats.info[j].T;
+						stats.nucl[j][ currNucleotide ]++;
+						// Keep track of quality scores at this position
+						stats.qual[j].push( currQualScore )
+						// Keep track of average GC content per read
+						gcSum += (seq[j] == 'C' || seq[j] == 'G') ? 1 : 0;
+						gcTot ++;
+						//
+						qualSum += currQualScore;
+						qualTot ++;
 					}
-
-					stats.gc.push(parseInt(Math.round(gcSum / gcTot * 100)));
+					stats.avgGC.push( Math.round(gcSum / gcTot * 1000) / 1000 );
+					stats.avgQual.push( Math.round(qualSum / qualTot) );
 				}
 
 				// Increment # reads processed
