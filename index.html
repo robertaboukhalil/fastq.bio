@@ -290,6 +290,12 @@
 					_fastqStats[file.name] = null;
 					_fastqN[file.name] = 0;
 				}
+				// If gzip, reset stats since need to read from beginning
+				var isGzip = file.name.match(/.gz$/);
+				if(isGzip) {
+					_fastqPtr[file.name] = 0;
+					_fastqStats[file.name] = null;
+				}
 
 				// Keep track of number of times sampled the file
 				if(_fastqN[file.name] > maxN) {
@@ -305,6 +311,13 @@
 					endPos    = Math.min(startPos + _fastqBytes, file.size),
 					callbacks = callbacks || {};
 
+				// If gzip, need to start reading from beginning
+				if(isGzip) {
+					endPos = _fastqBytes * _fastqN[file.name] / 4; // gzip ~ 4x compression?
+					_fastqLines = _fastqLines * _fastqN[file.name];
+				}
+
+				// Callback before reading
 				if("preread" in callbacks)
 					callbacks["preread"]();
 
@@ -316,8 +329,7 @@
 				reader.readAsBinaryString(file.slice(startPos, endPos));
 				reader.onload = function(e)
 				{
-					// _fastqStats[file.name] = 
-					parseChunk(file, reader); //, _fastqStats[file.name]);
+					parseChunk(file, reader);
 
 					if("postread" in callbacks)
 						callbacks["postread"](_fastqStats[file.name]);
@@ -420,27 +432,26 @@
 				var bytesRead = 0;
 				for(var i = 0; i < nbLines; i++)
 					bytesRead += chunk[i].length + 1; // +1 because of \n
-				_fastqPtr[file.name] += bytesRead;
 
-				// // Update pointer (and support gzip)
-				// if(isGzip)
-				// {
-				// 	// // For gzip
-				// 	// var compressed = new TextEncoder("utf-8").encode(bytesTxt);
-				// 	// console.log(bytesTxt)
-				// 	// console.log(compressed)
-				// 	// try {
-				// 	// 	var result = pako.deflate(compressed);
-				// 	// 	console.log(result)
-				// 	// 	_fastqPtr[file.name] += result.length;
-				// 	// } catch (err) {
-				// 	// 	console.log(err);
-				// 	// 	_fastqPtr[file.name] = -1;
-				// 	// }
-				// 	// console.log(chunkPako.length)
-				// 	// _fastqPtr[file.name] += chunkPako.length //reader.result.length+1;
-				// } else
-				// 	_fastqPtr[file.name] += bytesRead;
+				// Update pointer (and support gzip)
+				if(isGzip)
+				{
+					// // For gzip
+					// var compressed = new TextEncoder("utf-8").encode(bytesTxt);
+					// console.log(bytesTxt)
+					// console.log(compressed)
+					// try {
+					// 	var result = pako.deflate(compressed);
+					// 	console.log(result)
+					// 	_fastqPtr[file.name] += result.length;
+					// } catch (err) {
+					// 	console.log(err);
+					// 	_fastqPtr[file.name] = -1;
+					// }
+					// console.log(chunkPako.length)
+					// _fastqPtr[file.name] += chunkPako.length //reader.result.length+1;
+				} else
+					_fastqPtr[file.name] += bytesRead;
 
 				// Update stats
 				_fastqStats[file.name] = stats;
