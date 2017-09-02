@@ -3,46 +3,19 @@
 	<head>
 		<meta charset="utf-8">
 		<meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
-		<meta name="description" content="Preview FASTQ file QC">
+		<meta name="description" content="Peak at your sequencing data. Choose a FASTQ file and evaluate your sequence data quality in seconds.">
 		<meta name="author" content="Robert Aboukhalil">
 		<title>fastq.bio</title>
 
 		<!-- CSS -->
 		<link href="assets/bootstrap/bootstrap.min.css" rel="stylesheet">
 		<style type="text/css">
-		body {
-			height:100vh;
-		}
+		body { height:100vh; }
+		.footer{position:absolute;bottom:0;width:100%;height:60px;line-height:60px;background-color:#f5f5f5}
 
-		/* CSS Spinner */
+		/* CSS Spinner: */
 		/* https://stephanwagner.me/only-css-loading-spinner */
-		@keyframes spinner { to { transform: rotate(360deg); } }
-		.spinner:before {
-			content:'';
-			box-sizing: border-box;
-			position: absolute;
-			/*top: 50%;*/
-			/*left: 50%;*/
-			width: 20px;
-			height: 20px;
-			margin-top: -10px;
-			margin-left: -10px;
-			border-radius: 50%;
-			border: 2px solid #eee;
-			border-top-color: #2663a8;
-			animation: spinner .8s linear infinite;
-		}
-
-		/* Footer */
-		.footer {
-			position: absolute;
-			bottom: 0;
-			width: 100%;
-			/* Set the fixed height of the footer here */
-			height: 60px;
-			line-height: 60px; /* Vertically center the text there */
-			background-color: #f5f5f5;
-		}
+		@keyframes spinner{to{transform:rotate(360deg)}}.spinner:before{content:'';box-sizing:border-box;position:absolute;width:20px;height:20px;margin-top:-10px;margin-left:-10px;border-radius:50%;border:2px solid #eee;border-top-color:#2663a8;animation:spinner .8s linear infinite}
 		</style>
 	</head>
 	<body ondrop="drop_handler(event)" ondragover="dragover_handler(event)" ondragend="dragend_handler(event)">
@@ -61,13 +34,14 @@
 				<h2>Peek at Your Sequencing Data</h2>
 				<br>
 				<p class="lead">
-					Summarize the first 30K reads from a FASTQ.<br>
+					Summarize the first ~30K reads from a FASTQ.<br>
 					Your data never leaves the browser.
 				</p>
 				<br>
 				<button class="btnNewFile btn btn-lg btn-primary" role="button">Choose FASTQ File</button>
 				<input id="upload" type="file" style="display:none">
-				<br><p class="lead" style="color:#999">or drag &amp; drop your file</p>
+				<br><br>
+				<p class="lead" style="color:#999"><a id="btnSample" href="#">Use Example FASTQ (NA12878)</a></p>
 			</div>
 			<div class="containerPreview jumbotron" style="text-align:center; border-radius:0; display:none; padding:5px 0 0 5px">
 				<div id="plot-per-base-sequence-content" style="width:33%; height:325px; float:left;"></div>
