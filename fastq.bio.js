@@ -1,6 +1,7 @@
 // ---------------------------------------------------------------------
 // App
 // ---------------------------------------------------------------------
+var SAMPLE = "./data/NA12878_U0a_CGATGT_L001_R1_005.fastq";
 var FILES = {};
 var arrEl = document.querySelectorAll(".btnNewFile");
 for(var i = 0; i < arrEl.length; i++)
@@ -8,12 +9,31 @@ for(var i = 0; i < arrEl.length; i++)
 		document.querySelector("#upload").click();
 	});
 
-//
+// Handle Upload button
 document.querySelector("#upload").addEventListener("change", function(){
 	FILES = this.files;
 	launch();
 });
 
+// Handle loading sample FASTQ
+document.querySelector("#btnSample").addEventListener("click", function(){
+	launchURL(SAMPLE);
+});
+
+// Start sampling FASTQ file from URL
+function launchURL(url)
+{
+	var request = new XMLHttpRequest();
+	request.open("GET", url, true);
+	request.responseType = "blob";
+	request.onload = function() {
+		FILES = [ request.response ];
+		launch();
+	};
+	request.send();
+}
+
+// Start sampling FASTQ file
 function launch()
 {
 	if(!FASTQ.isValidFileName(FILES[0])) {
@@ -25,7 +45,7 @@ function launch()
 	document.querySelector(".spinner").style.display = "block";
 	setTimeout(function()
 	{
-		FASTQ.getNextChunk(FILES[0], 10, {
+		FASTQ.getNextChunk(FILES[0], 20, {
 			preread: function() {
 				document.querySelector(".spinner").style.display = "block";
 				document.querySelector(".containerMain").style.display = "none";
@@ -97,7 +117,7 @@ function plotStats(fastqStats)
 	}], {
 		title: "Per Base Sequence Quality<br><i>Sampled first " + nbReads + "K reads</i>",
 		xaxis: { title: "Read Position" },
-		yaxis: { title: "Base Quality" },
+		yaxis: { title: "Base Quality", range: [ 0, Math.max.apply(Math, seqQuality)*1.1 ] },
 		showlegend: false
 	}, plotlyConfig);
 
@@ -224,12 +244,12 @@ var FASTQ = (function()
 	{
 		// Validate file name
 		if(!isValidFileName(file))
-			return;
+			return false;
 
 		// Validate FASTQ:
 		// - Header line must start with @
 		// - Sequence and qual lines must be of equal lengths
-		return !(chunk[0].match(/^@/)) || chunk[1].length != chunk[3].length;
+		return chunk[0].match(/^@/) && chunk[1].length == chunk[3].length;
 	}
 
 	// =========================================================================
@@ -278,7 +298,11 @@ var FASTQ = (function()
 
 		// Exit if done reading file
 		if(startPos >= endPos || startPos == -1 || endPos == -1)
+		{
+			if("lastread" in callbacks)
+				callbacks["lastread"]();
 			return;
+		}
 
 		// Read file chunk
 		reader.readAsBinaryString(file.slice(startPos, endPos));
@@ -333,7 +357,7 @@ var FASTQ = (function()
 		for(var i = 0; i < nbLines; i += 4)
 		{
 			// Detect invalid FASTQ chunk
-			if(isValidChunk(file, [ chunk[0], chunk[1], chunk[2], chunk[3] ])) {
+			if(!isValidChunk(file, [ chunk[0], chunk[1], chunk[2], chunk[3] ])) {
 				console.log("Invalid FASTQ chunk")
 				_fastqPtr[file.name] = -1;
 				return;
