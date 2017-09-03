@@ -1,7 +1,7 @@
 // ---------------------------------------------------------------------
 // App
 // ---------------------------------------------------------------------
-var SAMPLE = "./data/NA12878_U0a_CGATGT_L001_R1_005.fastq";
+var SAMPLE = "data/NA12878_U0a_CGATGT_L001_R1_005.fastq";
 var FILES = {};
 var arrEl = document.querySelectorAll(".btnNewFile");
 for(var i = 0; i < arrEl.length; i++)
@@ -26,8 +26,14 @@ function launchURL(url)
 	var request = new XMLHttpRequest();
 	request.open("GET", url, true);
 	request.responseType = "blob";
-	request.onload = function() {
-		FILES = [ request.response ];
+	request.onload = function()
+	{
+		// Convert Blob to File
+		var blob = request.response;
+		blob.lastModifiedDate = new Date();
+		blob.name = "Sample.fastq";
+		// Launch
+		FILES = [ blob ];
 		launch();
 	};
 	request.send();
@@ -40,6 +46,9 @@ function launch()
 		alert("Error: please choose a FASTQ file.");
 		return;
 	}
+
+	// Hide footer past front page
+	document.querySelector(".footer").style.display = "none";
 
 	// Start reading file with a delay (prevent file open window from remaining visible)
 	document.querySelector(".spinner").style.display = "block";
