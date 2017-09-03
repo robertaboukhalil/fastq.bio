@@ -23,20 +23,25 @@ document.querySelector("#btnSample").addEventListener("click", function(){
 // Start sampling FASTQ file from URL
 function launchURL(url)
 {
-	var request = new XMLHttpRequest();
-	request.open("GET", url, true);
-	request.responseType = "blob";
-	request.onload = function()
+	document.querySelector(".loadingfile").style.display = "block";
+	document.querySelector(".loadingfile").innerHTML = "Loading example file..."
+	setTimeout(function()
 	{
-		// Convert Blob to File
-		var blob = request.response;
-		blob.lastModifiedDate = new Date();
-		blob.name = "Sample.fastq";
-		// Launch
-		FILES = [ blob ];
-		launch();
-	};
-	request.send();
+		var request = new XMLHttpRequest();
+		request.open("GET", url, true);
+		request.responseType = "blob";
+		request.onload = function()
+		{
+			// Convert Blob to File
+			var blob = request.response;
+			blob.lastModifiedDate = new Date();
+			blob.name = "Sample.fastq";
+			// Launch
+			FILES = [ blob ];
+			launch();
+		};
+		request.send();
+	}, 500);
 }
 
 // Start sampling FASTQ file
@@ -52,6 +57,9 @@ function launch()
 
 	// Start reading file with a delay (prevent file open window from remaining visible)
 	document.querySelector(".spinner").style.display = "block";
+	document.querySelector(".loadingfile").style.display = "block";
+	document.querySelector(".loadingfile").innerHTML = "Parsing reads from <i>" + FILES[0].name + "</i>..."
+
 	setTimeout(function()
 	{
 		FASTQ.getNextChunk(FILES[0], 20, {
@@ -68,6 +76,8 @@ function launch()
 			},
 			lastread: function() {
 				document.querySelector(".spinner").style.display = "none";
+				document.querySelector(".loadingfile").style.display = "none";
+
 				document.querySelector("#headerBtnNewFile").style.display = "block";
 				document.querySelector("#headerBtnNewFile").disabled = false;
 			}
