@@ -1,93 +1,85 @@
 <!DOCTYPE html>
 <html lang="en">
-	<head>
-		<meta charset="utf-8">
-		<meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
-		<meta name="description" content="Peak at your sequencing data. Choose a FASTQ file and evaluate your sequence data quality in seconds.">
-		<meta name="author" content="Robert Aboukhalil">
-		<title>fastq.bio</title>
+    <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+        <meta name="description" content="Peak at your sequencing data. Choose a FASTQ file and evaluate your sequence data quality in seconds.">
+        <meta name="author" content="Robert Aboukhalil">
+        <title>fastq.bio</title>
 
-		<!-- CSS -->
-		<link href="assets/bootstrap/bootstrap.min.css" rel="stylesheet">
-		<style type="text/css">
-		/*body { height:100vh; background-color:#eee; }*/
-		/*.footer{position:absolute;bottom:0;width:100%;height:60px;line-height:60px;background-color:#f5f5f5}*/
+        <link href="assets/bootstrap/bootstrap.min.css" rel="stylesheet">
+        <style type="text/css">
+        /* CSS Spinner: https://stephanwagner.me/only-css-loading-spinner */
+        @keyframes spinner{to{transform:rotate(360deg)}}.spinner:before{content:'';box-sizing:border-box;position:absolute;width:20px;height:20px;margin-top:-10px;margin-left:-10px;border-radius:50%;border:2px solid #eee;border-top-color:#2663a8;animation:spinner .8s linear infinite}
+        </style>
+    </head>
+    <body ondrop="drop_handler(event)" ondragover="dragover_handler(event)" ondragend="dragend_handler(event)">
+        <!-- Header -->
+        <nav class="navbar navbar-toggleable-md navbar-inverse bg-inverse mb-0">
+            <a class="navbar-brand" href=".">fastq.bio</a>
+            <div class="spinner" style="display:none"></div>
+            <div style="color:#fff; font-size:13px; margin-left:15px;">
+                <ul class="navbar-nav mr-auto">
+                    <li class="nav-item loadingfile" style="display:none"></li>
+                </ul>
+            </div>
+            <div id="headerBtnNewFile" style="margin-left:0px; display:none;">
+                <button class="btnNewFile btn btn-primary btn-sm my-2 my-sm-0" role="button">New File</button>
+            </div>
+        </nav>
 
-		/* CSS Spinner: */
-		/* https://stephanwagner.me/only-css-loading-spinner */
-		@keyframes spinner{to{transform:rotate(360deg)}}.spinner:before{content:'';box-sizing:border-box;position:absolute;width:20px;height:20px;margin-top:-10px;margin-left:-10px;border-radius:50%;border:2px solid #eee;border-top-color:#2663a8;animation:spinner .8s linear infinite}
-		</style>
-	</head>
-	<body ondrop="drop_handler(event)" ondragover="dragover_handler(event)" ondragend="dragend_handler(event)">
-		<!-- Header -->
-		<nav class="navbar navbar-toggleable-md navbar-inverse bg-inverse mb-0">
-			<a class="navbar-brand" href=".">fastq.bio</a>
-			<div class="spinner" style="display:none"></div>
-			<div style="color:#fff; font-size:13px; margin-left:15px;">
-				<ul class="navbar-nav mr-auto">
-					<li class="nav-item loadingfile" style="display:none">
-						
-					</li>
-				</ul>
-			</div>
+        <!-- Container -->
+        <div class="container" style="margin:0; padding:0; width:100%">
+            <div class="containerMain jumbotron" style="text-align:center; border-radius:0">
+                <h2>Peek at Your Sequencing Data</h2>
+                <br>
+                <p class="lead">
+                    Summarize the first ~30K reads from a FASTQ.<br>
+                    Your data never leaves the browser.
+                </p>
+                <br>
+                <button class="btnNewFile btn btn-lg btn-primary" role="button">Choose FASTQ File</button>
+                <input id="upload" type="file" style="display:none">
+                <br><br>
+                <p class="lead" style="color:#999"><a id="btnSample" href="#">Use Example FASTQ (NA12878)</a></p>
+            </div>
+            <div class="containerPreview jumbotron" style="text-align:center; border-radius:0; display:none; padding:5px 0 0 5px">
+                <div id="plot-per-base-sequence-content" style="width:33%; height:325px; float:left;"></div>
+                <div style="max-width:3%; float:left;">&nbsp;</div>
+                <div id="plot-per-base-sequence-quality" style="width:33%; height:325px; float:left;"></div>
+                <div style="max-width:3%; float:left;">&nbsp;</div>
+                <div id="plot-per-base-N-content" style="width:33%; height:325px; float:left;"></div>
 
-			<div id="headerBtnNewFile" style="margin-left:0px; display:none;">
-        		<button class="btnNewFile btn btn-primary btn-sm my-2 my-sm-0" role="button">New File</button>
-        	</div>
+                <br style="clear:both">
+                <div id="plot-dist-gc-content-per-read" style="width:33%; height:325px; float:left; margin-top:5px"></div>
+                <div style="max-width:3%; float:left;">&nbsp;</div>
+                <div id="plot-dist-qual-per-read" style="width:33%; height:325px; float:left; margin-top:5px"></div>
+                <div style="max-width:3%; float:left;">&nbsp;</div>
+                <div id="plot-dist-seq-length" style="width:33%; height:325px; float:left; margin-top:5px"></div>
 
-		</nav>
+                <br style="clear:both">
+                <br style="clear:both">
+            </div>
+        </div>
 
-		<!-- Container -->
-		<div class="container" style="margin:0; padding:0; width:100%">
-			<div class="containerMain jumbotron" style="text-align:center; border-radius:0">
-				<h2>Peek at Your Sequencing Data</h2>
-				<br>
-				<p class="lead">
-					Summarize the first ~30K reads from a FASTQ.<br>
-					Your data never leaves the browser.
-				</p>
-				<br>
-				<button class="btnNewFile btn btn-lg btn-primary" role="button">Choose FASTQ File</button>
-				<input id="upload" type="file" style="display:none">
-				<br><br>
-				<p class="lead" style="color:#999"><a id="btnSample" href="#">Use Example FASTQ (NA12878)</a></p>
-			</div>
-			<div class="containerPreview jumbotron" style="text-align:center; border-radius:0; display:none; padding:5px 0 0 5px">
-				<div id="plot-per-base-sequence-content" style="width:33%; height:325px; float:left;"></div>
-				<div style="max-width:3%; float:left;">&nbsp;</div>
-				<div id="plot-per-base-sequence-quality" style="width:33%; height:325px; float:left;"></div>
-				<div style="max-width:3%; float:left;">&nbsp;</div>
-				<div id="plot-per-base-N-content" style="width:33%; height:325px; float:left;"></div>
+        <footer class="footer">
+            <div class="container" style="text-align:right; font-size:12px">
+                <span class="text-muted">Built by <a href="http://www.robertaboukhalil.com" target="_blank">Robert Aboukhalil</a></span>
+            </div>
+        </footer>
 
-				<br style="clear:both">
-				<div id="plot-dist-gc-content-per-read" style="width:33%; height:325px; float:left; margin-top:5px"></div>
-				<div style="max-width:3%; float:left;">&nbsp;</div>
-				<div id="plot-dist-qual-per-read" style="width:33%; height:325px; float:left; margin-top:5px"></div>
-				<div style="max-width:3%; float:left;">&nbsp;</div>
-				<div id="plot-dist-seq-length" style="width:33%; height:325px; float:left; margin-top:5px"></div>
-
-				<br style="clear:both">
-				<br style="clear:both">
-			</div>
-		</div>
-
-		<footer class="footer">
-			<div class="container" style="text-align:right; font-size:12px">
-				<span class="text-muted">Built by <a href="http://www.robertaboukhalil.com" target="_blank">Robert Aboukhalil</a></span>
-			</div>
-		</footer>
-
-		<!-- JavaScript Libraries
-		======================================================================== -->
-		<!-- Bootstrap / JQuery -->
-		<script src="assets/jquery/jquery-3.1.1.slim.min.js"></script>
-		<script src="assets/bootstrap/tether_1.4.0_js_tether.min.js"></script>
-		<script src="assets/bootstrap/bootstrap.min.js"></script>
-		<script src="assets/ie10-viewport-bug-workaround.js"></script>
-		<!-- Plotly -->
-		<script src="assets/plotly/plotly-latest.min.js"></script>
-		<script src="assets/pako/pako.min.js"></script>
-		<!-- App -->
-		<script src="fastq.bio.min.js"></script>
-	</body>
+        <!-- JavaScript Libraries
+        ======================================================================== -->
+        <!-- Bootstrap / JQuery -->
+        <script src="assets/jquery/jquery-3.1.1.slim.min.js"></script>
+        <script src="assets/bootstrap/tether_1.4.0_js_tether.min.js"></script>
+        <script src="assets/bootstrap/bootstrap.min.js"></script>
+        <script src="assets/ie10-viewport-bug-workaround.js"></script>
+        <!-- Plotly -->
+        <script src="assets/plotly/plotly-latest.min.js"></script>
+        <script src="assets/pako/pako.min.js"></script>
+        <!-- Fastq.bio -->
+        <script src="fastq.bio.min.js"></script>
+        <script src="app.js"></script>
+    </body>
 </html>
