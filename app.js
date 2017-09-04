@@ -1,35 +1,44 @@
+// ---------------------------------------------------------------------
+// Support custom URL
+// ---------------------------------------------------------------------
+var customURL = getParameterByName("url");
+if(customURL != null)
+    launchURL(customURL);
+
+
 // -----------------------------------------------------------------------------
-// App
+// Handle Button Events
 // -----------------------------------------------------------------------------
-var FILES = {};
+// Choose Sample FASTQ
+document.querySelector("#btnSample").addEventListener("click", function(){
+    launchURL("data/NA12878_U0a_CGATGT_L001_R1_005.fastq");
+});
+// Choose FASTQ File
+document.querySelector("#upload").addEventListener("change", function(){
+    launch(this.files[0]);
+});
+// New File
 var arrEl = document.querySelectorAll(".btnNewFile");
 for(var i = 0; i < arrEl.length; i++)
     arrEl[i].addEventListener("click", function(){
         document.querySelector("#upload").click();
     });
 
-// Handle custom URL
-var SAMPLE = "data/NA12878_U0a_CGATGT_L001_R1_005.fastq";
-var customURL = getParameterByName("url");
-if(customURL != null)
-    launchURL(SAMPLE);
 
-// Handle Upload button
-document.querySelector("#upload").addEventListener("change", function(){
-    FILES = this.files;
-    launch();
-});
-
-// Handle loading sample FASTQ
-document.querySelector("#btnSample").addEventListener("click", function(){
-    launchURL(SAMPLE);
-});
-
+// ---------------------------------------------------------------------
+// Launch analysis
+// ---------------------------------------------------------------------
 // Start sampling FASTQ file from URL
 function launchURL(url)
 {
+    console.log("Reading FASTQ from " + url + "...");
+
+    document.querySelector(".spinner").style.display = "block";
+    document.querySelector(".footer").style.display = "none";
     document.querySelector(".loadingfile").style.display = "block";
-    document.querySelector(".loadingfile").innerHTML = "Loading example file..."
+    document.querySelector(".loadingfile").innerHTML = "Loading file..."
+    document.querySelector(".containerMain").style.display = "none";
+
     setTimeout(function()
     {
         var request = new XMLHttpRequest();
@@ -37,22 +46,22 @@ function launchURL(url)
         request.responseType = "blob";
         request.onload = function()
         {
+            console.log("Found file of size " + request.response.size/1024/1024 + "MB.")
             // Convert Blob to File
             var blob = request.response;
             blob.lastModifiedDate = new Date();
-            blob.name = "Sample.fastq";
+            blob.name = url.split("/").reverse()[0];
             // Launch
-            FILES = [ blob ];
-            launch();
+            launch(blob);
         };
         request.send();
     }, 500);
 }
 
 // Start sampling FASTQ file
-function launch()
+function launch(file)
 {
-    if(!FASTQ.isValidFileName(FILES[0])) {
+    if(!FASTQ.isValidFileName(file)) {
         alert("Error: please choose a FASTQ file.");
         return;
     }
@@ -63,11 +72,11 @@ function launch()
     // Start reading file with a delay (prevent file open window from remaining visible)
     document.querySelector(".spinner").style.display = "block";
     document.querySelector(".loadingfile").style.display = "block";
-    document.querySelector(".loadingfile").innerHTML = "Parsing reads from <i>" + FILES[0].name + "</i>..."
+    document.querySelector(".loadingfile").innerHTML = "Parsing reads from <i>" + file.name + "</i>..."
 
     setTimeout(function()
     {
-        FASTQ.getNextChunk(FILES[0], 20, {
+        FASTQ.getNextChunk(file, 20, {
             preread: function() {
                 document.querySelector(".spinner").style.display = "block";
                 document.querySelector(".containerMain").style.display = "none";
@@ -77,7 +86,7 @@ function launch()
             },
             postread: function(fastqStats) {
                 plotStats(fastqStats);
-                launch();
+                launch(file);
             },
             lastread: function() {
                 document.querySelector(".spinner").style.display = "none";
@@ -89,6 +98,7 @@ function launch()
         });
     }, 500);
 }
+
 
 // ---------------------------------------------------------------------
 // Plotting
@@ -236,9 +246,8 @@ function drop_handler(evt)
     else
         f = dataTransfer.files[i];
 
-    FILES = [ f ];
     FASTQ.reset();
-    launch();
+    launch(f);
     return;
 }
 
@@ -246,7 +255,6 @@ function drop_handler(evt)
 // ---------------------------------------------------------------------
 // Misc.
 // ---------------------------------------------------------------------
-
 // Source: https://stackoverflow.com/a/901144
 function getParameterByName(name, url)
 {
