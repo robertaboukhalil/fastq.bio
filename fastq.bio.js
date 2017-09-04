@@ -91,7 +91,14 @@ function launch()
 var tmp={};
 function plotStats(fastqStats)
 {
-	//
+	// If no stats to plot
+	if(fastqStats == null) {
+		alert("No data found in FASTQ file. Please load a different file.")
+		window.location = '/';
+		return false;
+	}
+
+	// Default Plotly config
 	var plotlyConfig = {
 		modeBarButtonsToRemove: ['sendDataToCloud', 'autoScale2d', 'hoverClosestCartesian', 'hoverCompareCartesian', 'lasso2d', 'select2d', 'zoom2d', 'pan2d', 'zoomIn2d', 'zoomOut2d', 'resetScale2d', 'toggleSpikelines'],
 		displaylogo: false, showTips: true
@@ -377,7 +384,7 @@ var FASTQ = (function()
 		for(var i = 0; i < nbLines; i += 4)
 		{
 			// Detect invalid FASTQ chunk
-			if(!isValidChunk(file, [ chunk[0], chunk[1], chunk[2], chunk[3] ])) {
+			if(!isValidChunk(file, [ chunk[0], chunk[i+1], chunk[i+2], chunk[i+3] ])) {
 				console.log("Invalid FASTQ chunk")
 				_fastqPtr[file.name] = -1;
 				return;
