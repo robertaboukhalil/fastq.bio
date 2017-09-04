@@ -32,6 +32,7 @@ for(var i = 0; i < arrEl.length; i++)
 function launchURL(url)
 {
     console.log("Reading FASTQ from " + url + "...");
+    ga("send", "event", "launch", "url_load", url);
 
     document.querySelector(".spinner").style.display = "block";
     document.querySelector(".footer").style.display = "none";
@@ -47,6 +48,7 @@ function launchURL(url)
         request.onload = function()
         {
             console.log("Found file of size " + request.response.size/1024/1024 + "MB.")
+            ga("send", "event", "launch", "url_loaded", url, request.response.size);
             // Convert Blob to File
             var blob = request.response;
             blob.lastModifiedDate = new Date();
@@ -65,6 +67,8 @@ function launch(file)
         alert("Error: please choose a FASTQ file.");
         return;
     }
+
+    ga("send", "event", "launch", "reading");
 
     // Hide footer past front page
     document.querySelector(".footer").style.display = "none";
@@ -106,6 +110,8 @@ function launch(file)
 var tmp={};
 function plotStats(fastqStats)
 {
+    ga("send", "event", "launch", "plotting");
+
     // If no stats to plot
     if(fastqStats == null) {
         alert("No data found in FASTQ file. Please load a different file.")

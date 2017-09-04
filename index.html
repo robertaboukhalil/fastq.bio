@@ -12,6 +12,16 @@
         /* CSS Spinner: https://stephanwagner.me/only-css-loading-spinner */
         @keyframes spinner{to{transform:rotate(360deg)}}.spinner:before{content:'';box-sizing:border-box;position:absolute;width:20px;height:20px;margin-top:-10px;margin-left:-10px;border-radius:50%;border:2px solid #eee;border-top-color:#2663a8;animation:spinner .8s linear infinite}
         </style>
+
+        <script>
+          (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+          (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+          m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+          })(window,document,'script','https://www.google-analytics.com/analytics.js','ga');
+
+          ga('create', 'UA-105788038-1', 'auto');
+          ga('send', 'pageview');
+        </script>
     </head>
     <body ondrop="drop_handler(event)" ondragover="dragover_handler(event)" ondragend="dragend_handler(event)">
         <!-- Header -->
