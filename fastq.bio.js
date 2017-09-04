@@ -368,6 +368,7 @@ var FASTQ = (function()
 
 		// Need at least 4 lines... otherwise skip this file
 		if(nbLines < 4) {
+			console.log("Error: only found " + nbLines + " lines.")
 			_fastqPtr[file.name] = -1;
 			return;
 		}
@@ -396,12 +397,9 @@ var FASTQ = (function()
 			for(var j = 0; j < seq.length; j++)
 			{
 				// Initialize stats
-				if(i == 0)
-				{
-					if(stats.nucl[j] == null) {
-						stats.nucl[j] = { A:0, C:0, G:0, T:0, N:0 };
-						stats.qual[j] = [];
-					}
+				if(stats.nucl[j] == null) {
+					stats.nucl[j] = { A:0, C:0, G:0, T:0, N:0 };
+					stats.qual[j] = [];
 				}
 
 				// Get current base nucleotide + quality score
