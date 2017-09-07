@@ -44,6 +44,7 @@ function launchURL(url)
     {
         var request = new XMLHttpRequest();
         request.open("GET", url, true);
+        request.setRequestHeader("Range", "bytes=0-10000000");
         request.responseType = "blob";
         request.onload = function()
         {
