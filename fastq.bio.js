@@ -126,8 +126,16 @@ var FASTQ = (function()
             stats = statsCurr;
 
         // Unzip FASTQ chunk
-        if(isGzip) 
-            chunk = new TextDecoder("utf-8").decode(pako.inflate(chunk));
+        if(isGzip)
+        {
+            var inflated = pako.inflate(chunk);
+            if(inflated.length == 0) {
+                alert("Error: The .gz file specified has an unsupported encoding.");
+                _fastqPtr[file.name] = -1;
+                return;
+            }
+            chunk = new TextDecoder("utf-8").decode(inflated);
+        }
 
         // Number of lines to validate
         chunk = chunk.split("\n");
