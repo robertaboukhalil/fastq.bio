@@ -94,8 +94,24 @@ var FASTQ = (function()
 
         // Read file chunk
         reader.readAsBinaryString(file.slice(startPos, endPos));
-        reader.onload = function(e) {
-            parseChunk(file, reader);
+        reader.onload = function(e)
+        {
+            var chunk = reader.result;
+
+            // Unzip FASTQ chunk if need be
+            if(isGzip)
+            {
+                var inflated = pako.inflate(chunk);
+                if(inflated.length == 0) {
+                    alert("Error: The .gz file specified has an unsupported encoding. Try unzipping the FASTQ file and re-gzipping it.");
+                    _fastqPtr[file.name] = -1;
+                    return;
+                }
+                chunk = new TextDecoder("utf-8").decode(inflated);
+            }
+
+            // Parse chunk
+            parseChunk(file, chunk);
             if("postread" in callbacks)
                 callbacks["postread"](_fastqStats[file.name]);
         }
@@ -104,10 +120,9 @@ var FASTQ = (function()
     // -------------------------------------------------------------------------
     // Parse a FASTQ chunk
     // -------------------------------------------------------------------------
-    function parseChunk(file, reader)
+    function parseChunk(file, chunk)
     {
         var stats     = {},
-            chunk     = reader.result,
             nbLines   = _fastqLines,
             isGzip    = file.name.match(/.gz$/),
             statsCurr = _fastqStats[file.name];
@@ -124,18 +139,6 @@ var FASTQ = (function()
             };
         else
             stats = statsCurr;
-
-        // Unzip FASTQ chunk
-        if(isGzip)
-        {
-            var inflated = pako.inflate(chunk);
-            if(inflated.length == 0) {
-                alert("Error: The .gz file specified has an unsupported encoding. Try unzipping the FASTQ file and re-gzipping it.");
-                _fastqPtr[file.name] = -1;
-                return;
-            }
-            chunk = new TextDecoder("utf-8").decode(inflated);
-        }
 
         // Split by break line
         chunk = chunk.split("\n");
