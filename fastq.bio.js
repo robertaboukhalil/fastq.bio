@@ -77,6 +77,7 @@ var FASTQ = (function()
 
         // If gzip, need to start reading from beginning
         if(isGzip) {
+            startPos = 0;
             endPos = _fastqBytes * _fastqN[file.name] / 4; // gzip ~ 4x compression?
             _fastqLines = _fastqLinesOrig * _fastqN[file.name] * 10;
         }
@@ -124,7 +125,6 @@ var FASTQ = (function()
     {
         var stats     = {},
             nbLines   = _fastqLines,
-            isGzip    = file.name.match(/.gz$/),
             statsCurr = _fastqStats[file.name];
 
         // Load previous stats if present
@@ -213,10 +213,7 @@ var FASTQ = (function()
         var bytesRead = 0;
         for(var i = 0; i < nbLines; i++)
             bytesRead += chunk[i].length + 1; // +1 because of \n
-
-        // Update pointer (and support gzip)
-        if(!isGzip)
-            _fastqPtr[file.name] += bytesRead;
+        _fastqPtr[file.name] += bytesRead;
 
         // Update stats
         _fastqStats[file.name] = stats;
