@@ -10,7 +10,9 @@ var FASTQ = (function()
         _fastqPhred  = 33,
         _fastqPtr    = {}, // pointer to current byte position; key = filename
         _fastqStats  = {}, // stats; key = filename
-        _fastqN      = {}; // number of times read chunk; key = filename
+        _fastqN      = {}, // number of times read chunk; key = filename
+        _fastqSample = {}, // sample first or random reads (label on plots); key = filename
+        _fastqVisited= {}; // reads already visited; key = filename
 
     function reset() {
         _fastqLines  = _fastqLinesOrig;
@@ -53,12 +55,13 @@ var FASTQ = (function()
             _fastqPtr[file.name] = 0;
             _fastqStats[file.name] = null;
             _fastqN[file.name] = 0;
+            _fastqVisited[file.name] = [];
         }
         // If gzip, reset stats since need to read from beginning
         var isGzip = file.name.match(/.gz$/);
         if(isGzip) {
-            _fastqPtr[file.name] = 0;
             _fastqStats[file.name] = null;
+            _fastqSample[file.name] = "first";
         }
 
         // Keep track of number of times sampled the file
@@ -71,15 +74,18 @@ var FASTQ = (function()
 
         // Variables
         var reader    = new FileReader(),
-            startPos  = _fastqPtr[file.name],
-            endPos    = Math.min(startPos + _fastqBytes, file.size),
             callbacks = callbacks || {};
 
         // If gzip, need to start reading from beginning
         if(isGzip) {
-            startPos = 0;
-            endPos = _fastqBytes * _fastqN[file.name] / 4; // gzip ~ 4x compression?
+            startPos    = 0;
+            endPos      = _fastqBytes * _fastqN[file.name] / 4; // gzip ~ 4x compression?
             _fastqLines = _fastqLinesOrig * _fastqN[file.name] * 10;
+        }
+        // Otherwise, choose a random sampling point
+        else {
+            startPos = Math.floor(Math.random() * (file.size + 1));
+            endPos   = Math.min(startPos + _fastqBytes, file.size);
         }
 
         // Callback before reading
@@ -87,13 +93,14 @@ var FASTQ = (function()
             callbacks["preread"]();
 
         // Exit if done reading file
-        if(startPos >= endPos || startPos == -1 || endPos == -1) {
+        if(startPos >= endPos || _fastqPtr[file.name] == -1) {
             if("lastread" in callbacks)
                 callbacks["lastread"]();
             return;
         }
 
         // Read file chunk
+        console.log("[getNextChunk] Fetching bytes: " + startPos + " -> " + endPos);            
         reader.readAsBinaryString(file.slice(startPos, endPos));
         reader.onload = function(e)
         {
@@ -112,20 +119,23 @@ var FASTQ = (function()
             }
 
             // Parse chunk
-            parseChunk(file, chunk);
+            parseChunk(file, chunk, startPos);
             if("postread" in callbacks)
-                callbacks["postread"](_fastqStats[file.name]);
+                callbacks["postread"](_fastqStats[file.name], _fastqSample[file.name]);
         }
     }
 
     // -------------------------------------------------------------------------
     // Parse a FASTQ chunk
     // -------------------------------------------------------------------------
-    function parseChunk(file, chunk)
+    function parseChunk(file, chunk, startPos)
     {
-        var stats     = {},
-            nbLines   = _fastqLines,
-            statsCurr = _fastqStats[file.name];
+        var stats         = {},
+            nbLines       = _fastqLines,
+            statsCurr     = _fastqStats[file.name],
+            visitedBytes  = startPos,
+            visitedReads  = _fastqVisited[file.name],
+            visitedReject = 0;
 
         // Load previous stats if present
         if(statsCurr == null)
@@ -155,8 +165,10 @@ var FASTQ = (function()
         }
 
         // Go to next valid FASTQ line (assume not sampling from beginning of line)
-        while(!isValidChunk(file, [ chunk[0],chunk[1],chunk[2],chunk[3] ] ))
+        while(!isValidChunk(file, [ chunk[0],chunk[1],chunk[2],chunk[3] ] )) {
+            visitedBytes += chunk[0].length + 1;
             chunk.shift();
+        }
 
         // Loop through each FASTQ read
         for(var i = 0; i < nbLines; i += 4)
@@ -209,12 +221,6 @@ var FASTQ = (function()
         // Increment # reads processed
         console.log("[parseChunk] Read " + nbLines + " lines - " + stats.reads + " reads total")
 
-        // Keep track of nb bytes read
-        var bytesRead = 0;
-        for(var i = 0; i < nbLines; i++)
-            bytesRead += chunk[i].length + 1; // +1 because of \n
-        _fastqPtr[file.name] += bytesRead;
-
         // Update stats
         _fastqStats[file.name] = stats;
 
@@ -227,6 +233,8 @@ var FASTQ = (function()
     return {
         isValidFileName: isValidFileName,
         getNextChunk: getNextChunk,
-        reset: reset
+        reset: reset,
+        tmp: tmp,
+        tmp2: tmp2
     };
 })();
