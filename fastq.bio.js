@@ -149,7 +149,7 @@ var FASTQ = (function()
 
         // Need at least 4 lines... otherwise skip this file
         if(nbLines < 4) {
-            console.log("Error: only found " + nbLines + " lines.")
+            console.log("[parseChunk] Error: found " + nbLines + " lines.")
             _fastqPtr[file.name] = -1;
             return;
         }
@@ -163,7 +163,7 @@ var FASTQ = (function()
         {
             // Detect invalid FASTQ chunk
             if(!isValidChunk(file, [ chunk[0], chunk[i+1], chunk[i+2], chunk[i+3] ])) {
-                console.log("Invalid FASTQ chunk")
+                console.log("[parseChunk] Invalid FASTQ format.")
                 _fastqPtr[file.name] = -1;
                 return;
             }
@@ -207,7 +207,7 @@ var FASTQ = (function()
         }
 
         // Increment # reads processed
-        console.log("Read " + nbLines + "lines -- " + stats.reads + " reads total")
+        console.log("[parseChunk] Read " + nbLines + " lines - " + stats.reads + " reads total")
 
         // Keep track of nb bytes read
         var bytesRead = 0;
