@@ -180,6 +180,24 @@ var FASTQ = (function()
                 return;
             }
 
+            // Check if already visited this read (uniquely identified by byte position, not read name)
+            if(visitedReads.indexOf(visitedBytes) != -1)
+            {
+                // If too many reads already re-visited, stop processing this file
+                if(visitedReject / (nbLines/4) > 0.55) {
+                    _fastqPtr[file.name] = -1;
+                    console.log("[parseChunk] " + Math.round(visitedReject / (nbLines/4) * 100) + "% of reads already seen");
+                    return;
+                }
+
+                visitedReject++;
+                continue;
+            }
+            // Keep track of current read visited (as function of byte position)
+            visitedReads.push( visitedBytes );
+            visitedBytes += chunk[i].length+1 + chunk[i+1].length+1 + chunk[i+2].length+1 + chunk[i+3].length+1;
+
+
             // Get current read's sequence and quality score lines
             var seq  = chunk[i+1],
                 qual = chunk[i+3];
