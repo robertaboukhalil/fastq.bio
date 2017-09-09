@@ -130,15 +130,16 @@ var FASTQ = (function()
         {
             var inflated = pako.inflate(chunk);
             if(inflated.length == 0) {
-                alert("Error: The .gz file specified has an unsupported encoding.");
+                alert("Error: The .gz file specified has an unsupported encoding. Try unzipping the FASTQ file and re-gzipping it.");
                 _fastqPtr[file.name] = -1;
                 return;
             }
             chunk = new TextDecoder("utf-8").decode(inflated);
         }
 
-        // Number of lines to validate
+        // Split by break line
         chunk = chunk.split("\n");
+        // Number of lines to validate
         if(chunk.length < nbLines)
             nbLines = chunk.length - chunk.length % 4;
         nbLines -= 4; // Skip last read: Make sure it isn't clipped
@@ -149,6 +150,10 @@ var FASTQ = (function()
             _fastqPtr[file.name] = -1;
             return;
         }
+
+        // Go to next valid FASTQ line (assume not sampling from beginning of line)
+        while(!isValidChunk(file, [ chunk[0],chunk[1],chunk[2],chunk[3] ] ))
+            chunk.shift();
 
         // Loop through each FASTQ read
         for(var i = 0; i < nbLines; i += 4)
