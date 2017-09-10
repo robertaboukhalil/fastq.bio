@@ -56,6 +56,7 @@ var FASTQ = (function()
             _fastqStats[file.name] = null;
             _fastqN[file.name] = 0;
             _fastqVisited[file.name] = [];
+            _fastqSample[file.name] = "random";
         }
         // If gzip, reset stats since need to read from beginning
         var isGzip = file.name.match(/.gz$/);
@@ -87,6 +88,10 @@ var FASTQ = (function()
             startPos = Math.floor(Math.random() * (file.size + 1));
             endPos   = Math.min(startPos + _fastqBytes, file.size);
         }
+
+        // The first few samplings of the file, make sure to show something quickly
+        if(_fastqN[file.name] <= 3)
+            endPos -= Math.round((endPos - startPos) / 2);
 
         // Callback before reading
         if("preread" in callbacks)
@@ -131,6 +136,7 @@ var FASTQ = (function()
     function parseChunk(file, chunk, startPos)
     {
         var stats         = {},
+            isGzip        = file.name.match(/.gz$/),
             nbLines       = _fastqLines,
             statsCurr     = _fastqStats[file.name],
             visitedBytes  = startPos,
@@ -181,22 +187,24 @@ var FASTQ = (function()
             }
 
             // Check if already visited this read (uniquely identified by byte position, not read name)
-            if(visitedReads.indexOf(visitedBytes) != -1)
+            if(!isGzip)
             {
-                // If too many reads already re-visited, stop processing this file
-                if(visitedReject / (nbLines/4) > 0.55) {
-                    _fastqPtr[file.name] = -1;
-                    console.log("[parseChunk] " + Math.round(visitedReject / (nbLines/4) * 100) + "% of reads already seen");
-                    return;
+                if(visitedReads.indexOf(visitedBytes) != -1)
+                {
+                    // If too many reads already re-visited, stop processing this file
+                    if(visitedReject / (nbLines/4) > 0.66) {
+                        _fastqPtr[file.name] = -1;
+                        console.log("[parseChunk] " + Math.round(visitedReject / (nbLines/4) * 100) + "% of reads already seen");
+                        return;
+                    }
+
+                    visitedReject++;
+                    continue;
                 }
-
-                visitedReject++;
-                continue;
+                // Keep track of current read visited (as function of byte position)
+                visitedReads.push( visitedBytes );
+                visitedBytes += chunk[i].length+1 + chunk[i+1].length+1 + chunk[i+2].length+1 + chunk[i+3].length+1;                
             }
-            // Keep track of current read visited (as function of byte position)
-            visitedReads.push( visitedBytes );
-            visitedBytes += chunk[i].length+1 + chunk[i+1].length+1 + chunk[i+2].length+1 + chunk[i+3].length+1;
-
 
             // Get current read's sequence and quality score lines
             var seq  = chunk[i+1],
@@ -251,8 +259,6 @@ var FASTQ = (function()
     return {
         isValidFileName: isValidFileName,
         getNextChunk: getNextChunk,
-        reset: reset,
-        tmp: tmp,
-        tmp2: tmp2
+        reset: reset
     };
 })();
