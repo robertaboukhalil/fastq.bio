@@ -82,7 +82,7 @@ function launch(file)
 
     setTimeout(function()
     {
-        FASTQ.getNextChunk(file, 20, {
+        FASTQ.getNextChunk(file, {
             preread: function() {
                 document.querySelector(".spinner").style.display = "block";
                 document.querySelector(".containerMain").style.display = "none";
