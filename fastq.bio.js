@@ -6,16 +6,16 @@ var FASTQ = (function()
     // =========================================================================
     var _fastqRegex  = /.fastq|.fq|.fastq.gz|.fq.gz/,
         _fastqBytes  = 1024 * 500,
-        _fastqLines  = 10000, _fastqLinesOrig = 10000,
+        _fastqLines  = 10000,
         _fastqPhred  = 33,
         _fastqPtr    = {}, // pointer to current byte position; key = filename
         _fastqStats  = {}, // stats; key = filename
         _fastqN      = {}, // number of times read chunk; key = filename
         _fastqSample = {}, // sample first or random reads (label on plots); key = filename
-        _fastqVisited= {}; // reads already visited; key = filename
+        _fastqVisited= {}, // reads already visited; key = filename
+        _maxN = 30;
 
     function reset() {
-        _fastqLines  = _fastqLinesOrig;
         _fastqPtr    = {};
         _fastqStats  = {};
         _fastqN      = {};
@@ -48,7 +48,7 @@ var FASTQ = (function()
     // -------------------------------------------------------------------------
     // Get next FASTQ chunk
     // -------------------------------------------------------------------------
-    function getNextChunk(file, maxN, callbacks)
+    function getNextChunk(file, callbacks)
     {
         // Initialize
         if(!(file.name in _fastqPtr)) {
@@ -66,7 +66,7 @@ var FASTQ = (function()
         }
 
         // Keep track of number of times sampled the file
-        if(_fastqN[file.name] > maxN) {
+        if(_fastqN[file.name] > _maxN) {
             if("lastread" in callbacks)
                 callbacks["lastread"]();
             return;
@@ -79,9 +79,9 @@ var FASTQ = (function()
 
         // If gzip, need to start reading from beginning
         if(isGzip) {
-            startPos    = 0;
-            endPos      = _fastqBytes * _fastqN[file.name] / 4; // gzip ~ 4x compression?
-            _fastqLines = _fastqLinesOrig * _fastqN[file.name] * 10;
+            startPos = 0;
+            endPos   = _fastqBytes * _fastqN[file.name] / 4; // gzip ~ 4x compression?
+            _maxN    = 10;
         }
         // Otherwise, choose a random sampling point
         else {
@@ -105,7 +105,7 @@ var FASTQ = (function()
         }
 
         // Read file chunk
-        console.log("[getNextChunk] Fetching bytes: " + startPos + " -> " + endPos);            
+        console.log("[getNextChunk][" + _fastqN[file.name] + "][" + _maxN + "] Fetching bytes: " + startPos + " -> " + endPos);            
         reader.readAsBinaryString(file.slice(startPos, endPos));
         reader.onload = function(e)
         {
@@ -192,7 +192,7 @@ var FASTQ = (function()
                 if(visitedReads.indexOf(visitedBytes) != -1)
                 {
                     // If too many reads already re-visited, stop processing this file
-                    if(visitedReject / (nbLines/4) > 0.66) {
+                    if(visitedReject / (nbLines/4) > 0.80 && _fastqN[file.name] > 10) {
                         _fastqPtr[file.name] = -1;
                         console.log("[parseChunk] " + Math.round(visitedReject / (nbLines/4) * 100) + "% of reads already seen");
                         return;
