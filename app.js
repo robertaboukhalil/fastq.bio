@@ -48,7 +48,7 @@ function launchURL(url)
         request.responseType = "blob";
         request.onload = function()
         {
-            console.log("Found file of size " + request.response.size/1024/1024 + "MB.")
+            console.log("[launchURL] Loaded file of size " + Math.round(request.response.size/1024/1024*100)/100 + "MB.")
             ga("send", "event", "launch", "url_loaded", url, request.response.size);
             // Convert Blob to File
             var blob = request.response;
@@ -58,7 +58,8 @@ function launchURL(url)
             launch(blob);
         };
         request.send();
-    }, 500);
+
+    }, 150);
 }
 
 // Start sampling FASTQ file
@@ -81,7 +82,7 @@ function launch(file)
 
     setTimeout(function()
     {
-        FASTQ.getNextChunk(file, 20, {
+        FASTQ.getNextChunk(file, {
             preread: function() {
                 document.querySelector(".spinner").style.display = "block";
                 document.querySelector(".containerMain").style.display = "none";
@@ -89,8 +90,8 @@ function launch(file)
                 document.querySelector("#headerBtnNewFile").style.display = "none";
                 document.querySelector("#headerBtnNewFile").disabled = true;
             },
-            postread: function(fastqStats) {
-                plotStats(fastqStats);
+            postread: function(fastqStats, samplingType) {
+                plotStats(fastqStats, samplingType);
                 launch(file);
             },
             lastread: function() {
@@ -109,7 +110,7 @@ function launch(file)
 // Plotting
 // ---------------------------------------------------------------------
 var tmp={};
-function plotStats(fastqStats)
+function plotStats(fastqStats, samplingType)
 {
     ga("send", "event", "launch", "plotting");
 
@@ -147,6 +148,11 @@ function plotStats(fastqStats)
     });
 
     // -- Plots
+    if(samplingType == "random")
+        samplingType = "<i>Sampled " + nbReads + "K reads randomly</i>";
+    else
+        samplingType = "<i>Sampled first " + nbReads + "K reads</i>";
+
     // Plot sequence content as function of position
     Plotly.newPlot('plot-per-base-sequence-content', [
         { y: seqContents.A, name: 'A' },
@@ -154,7 +160,7 @@ function plotStats(fastqStats)
         { y: seqContents.G, name: 'G' },
         { y: seqContents.T, name: 'T' },
     ], {
-        title: "Per Base Sequence Content<br><i>Sampled first " + nbReads + "K reads</i>",
+        title: "Per Base Sequence Content<br>" + samplingType,
         xaxis: { title: "Read Position" },
         yaxis: { title: "Composition" },
     }, plotlyConfig);
@@ -163,7 +169,7 @@ function plotStats(fastqStats)
     Plotly.newPlot('plot-per-base-sequence-quality', [{
         y: seqQuality
     }], {
-        title: "Per Base Sequence Quality<br><i>Sampled first " + nbReads + "K reads</i>",
+        title: "Per Base Sequence Quality<br>" + samplingType,
         xaxis: { title: "Read Position" },
         yaxis: { title: "Base Quality", range: [ 0, Math.max.apply(Math, seqQuality)*1.1 ] },
         showlegend: false
@@ -173,7 +179,7 @@ function plotStats(fastqStats)
     Plotly.newPlot('plot-per-base-N-content', [
         { y: seqContents.N, name: 'N' }
     ], {
-        title: "Per Base N Content<br><i>Sampled first " + nbReads + "K reads</i>",
+        title: "Per Base N Content<br>" + samplingType,
         xaxis: { title: "Read Position" },
         yaxis: { title: "Frequency", range: [0, 1] },
     }, plotlyConfig);
@@ -188,7 +194,7 @@ function plotStats(fastqStats)
             size: 0.05,
         },
     }], {
-        title: "Average GC Content per Read<br><i>Sampled first " + nbReads + "K reads</i>",
+        title: "Average GC Content per Read<br>" + samplingType,
         xaxis: { title: "GC Content" },
         yaxis: { title: "Counts" },
         showlegend: false,
@@ -199,7 +205,7 @@ function plotStats(fastqStats)
         x: fastqStats.avgQual,
         type: 'histogram'
     }], {
-        title: "Average Quality Score per Read<br><i>Sampled first " + nbReads + "K reads</i>",
+        title: "Average Quality Score per Read<br>" + samplingType,
         xaxis: { title: "Quality Score" },
         yaxis: { title: "Counts" },
         showlegend: false,
@@ -210,7 +216,7 @@ function plotStats(fastqStats)
         x: fastqStats.seqlen,
         type: 'histogram'
     }], {
-        title: "Sequence Length Distribution<br><i>Sampled first " + nbReads + "K reads</i>",
+        title: "Sequence Length Distribution<br>" + samplingType,
         xaxis: { title: "Sequence Length" },
         yaxis: { title: "Counts" },
         showlegend: false

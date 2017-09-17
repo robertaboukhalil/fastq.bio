@@ -6,14 +6,16 @@ var FASTQ = (function()
     // =========================================================================
     var _fastqRegex  = /.fastq|.fq|.fastq.gz|.fq.gz/,
         _fastqBytes  = 1024 * 500,
-        _fastqLines  = 10000, _fastqLinesOrig = 10000,
+        _fastqLines  = 10000,
         _fastqPhred  = 33,
         _fastqPtr    = {}, // pointer to current byte position; key = filename
         _fastqStats  = {}, // stats; key = filename
-        _fastqN      = {}; // number of times read chunk; key = filename
+        _fastqN      = {}, // number of times read chunk; key = filename
+        _fastqSample = {}, // sample first or random reads (label on plots); key = filename
+        _fastqVisited= {}, // reads already visited; key = filename
+        _maxN = 30;
 
     function reset() {
-        _fastqLines  = _fastqLinesOrig;
         _fastqPtr    = {};
         _fastqStats  = {};
         _fastqN      = {};
@@ -46,23 +48,25 @@ var FASTQ = (function()
     // -------------------------------------------------------------------------
     // Get next FASTQ chunk
     // -------------------------------------------------------------------------
-    function getNextChunk(file, maxN, callbacks)
+    function getNextChunk(file, callbacks)
     {
         // Initialize
         if(!(file.name in _fastqPtr)) {
             _fastqPtr[file.name] = 0;
             _fastqStats[file.name] = null;
             _fastqN[file.name] = 0;
+            _fastqVisited[file.name] = [];
+            _fastqSample[file.name] = "random";
         }
         // If gzip, reset stats since need to read from beginning
         var isGzip = file.name.match(/.gz$/);
         if(isGzip) {
-            _fastqPtr[file.name] = 0;
             _fastqStats[file.name] = null;
+            _fastqSample[file.name] = "first";
         }
 
         // Keep track of number of times sampled the file
-        if(_fastqN[file.name] > maxN) {
+        if(_fastqN[file.name] > _maxN) {
             if("lastread" in callbacks)
                 callbacks["lastread"]();
             return;
@@ -71,46 +75,73 @@ var FASTQ = (function()
 
         // Variables
         var reader    = new FileReader(),
-            startPos  = _fastqPtr[file.name],
-            endPos    = Math.min(startPos + _fastqBytes, file.size),
             callbacks = callbacks || {};
 
         // If gzip, need to start reading from beginning
         if(isGzip) {
-            endPos = _fastqBytes * _fastqN[file.name] / 4; // gzip ~ 4x compression?
-            _fastqLines = _fastqLinesOrig * _fastqN[file.name] * 10;
+            startPos = 0;
+            endPos   = _fastqBytes * _fastqN[file.name] / 4; // gzip ~ 4x compression?
+            _maxN    = 10;
         }
+        // Otherwise, choose a random sampling point
+        else {
+            startPos = Math.floor(Math.random() * (file.size + 1));
+            endPos   = Math.min(startPos + _fastqBytes, file.size);
+        }
+
+        // The first few samplings of the file, make sure to show something quickly
+        if(_fastqN[file.name] <= 3)
+            endPos -= Math.round((endPos - startPos) / 2);
 
         // Callback before reading
         if("preread" in callbacks)
             callbacks["preread"]();
 
         // Exit if done reading file
-        if(startPos >= endPos || startPos == -1 || endPos == -1) {
+        if(startPos >= endPos || _fastqPtr[file.name] == -1) {
             if("lastread" in callbacks)
                 callbacks["lastread"]();
             return;
         }
 
         // Read file chunk
+        console.log("[getNextChunk][" + _fastqN[file.name] + "][" + _maxN + "] Fetching bytes: " + startPos + " -> " + endPos);            
         reader.readAsBinaryString(file.slice(startPos, endPos));
-        reader.onload = function(e) {
-            parseChunk(file, reader);
+        reader.onload = function(e)
+        {
+            var chunk = reader.result;
+
+            // Unzip FASTQ chunk if need be
+            if(isGzip)
+            {
+                var inflated = pako.inflate(chunk);
+                if(inflated.length == 0) {
+                    alert("Error: The .gz file specified has an unsupported encoding. Try unzipping the FASTQ file and re-gzipping it.");
+                    _fastqPtr[file.name] = -1;
+                    return;
+                }
+                chunk = new TextDecoder("utf-8").decode(inflated);
+            }
+
+            // Parse chunk
+            parseChunk(file, chunk, startPos);
             if("postread" in callbacks)
-                callbacks["postread"](_fastqStats[file.name]);
+                callbacks["postread"](_fastqStats[file.name], _fastqSample[file.name]);
         }
     }
 
     // -------------------------------------------------------------------------
     // Parse a FASTQ chunk
     // -------------------------------------------------------------------------
-    function parseChunk(file, reader)
+    function parseChunk(file, chunk, startPos)
     {
-        var stats     = {},
-            chunk     = reader.result,
-            nbLines   = _fastqLines,
-            isGzip    = file.name.match(/.gz$/),
-            statsCurr = _fastqStats[file.name];
+        var stats         = {},
+            isGzip        = file.name.match(/.gz$/),
+            nbLines       = _fastqLines,
+            statsCurr     = _fastqStats[file.name],
+            visitedBytes  = startPos,
+            visitedReads  = _fastqVisited[file.name],
+            visitedReject = 0;
 
         // Load previous stats if present
         if(statsCurr == null)
@@ -125,29 +156,24 @@ var FASTQ = (function()
         else
             stats = statsCurr;
 
-        // Unzip FASTQ chunk
-        if(isGzip)
-        {
-            var inflated = pako.inflate(chunk);
-            if(inflated.length == 0) {
-                alert("Error: The .gz file specified has an unsupported encoding.");
-                _fastqPtr[file.name] = -1;
-                return;
-            }
-            chunk = new TextDecoder("utf-8").decode(inflated);
-        }
-
-        // Number of lines to validate
+        // Split by break line
         chunk = chunk.split("\n");
+        // Number of lines to validate
         if(chunk.length < nbLines)
             nbLines = chunk.length - chunk.length % 4;
         nbLines -= 4; // Skip last read: Make sure it isn't clipped
 
         // Need at least 4 lines... otherwise skip this file
         if(nbLines < 4) {
-            console.log("Error: only found " + nbLines + " lines.")
+            console.log("[parseChunk] Error: found " + nbLines + " lines.")
             _fastqPtr[file.name] = -1;
             return;
+        }
+
+        // Go to next valid FASTQ line (assume not sampling from beginning of line)
+        while(!isValidChunk(file, [ chunk[0],chunk[1],chunk[2],chunk[3] ] )) {
+            visitedBytes += chunk[0].length + 1;
+            chunk.shift();
         }
 
         // Loop through each FASTQ read
@@ -155,9 +181,29 @@ var FASTQ = (function()
         {
             // Detect invalid FASTQ chunk
             if(!isValidChunk(file, [ chunk[0], chunk[i+1], chunk[i+2], chunk[i+3] ])) {
-                console.log("Invalid FASTQ chunk")
+                console.log("[parseChunk] Invalid FASTQ format.")
                 _fastqPtr[file.name] = -1;
                 return;
+            }
+
+            // Check if already visited this read (uniquely identified by byte position, not read name)
+            if(!isGzip)
+            {
+                if(visitedReads.indexOf(visitedBytes) != -1)
+                {
+                    // If too many reads already re-visited, stop processing this file
+                    if(visitedReject / (nbLines/4) > 0.80 && _fastqN[file.name] > 10) {
+                        _fastqPtr[file.name] = -1;
+                        console.log("[parseChunk] " + Math.round(visitedReject / (nbLines/4) * 100) + "% of reads already seen");
+                        return;
+                    }
+
+                    visitedReject++;
+                    continue;
+                }
+                // Keep track of current read visited (as function of byte position)
+                visitedReads.push( visitedBytes );
+                visitedBytes += chunk[i].length+1 + chunk[i+1].length+1 + chunk[i+2].length+1 + chunk[i+3].length+1;                
             }
 
             // Get current read's sequence and quality score lines
@@ -199,16 +245,7 @@ var FASTQ = (function()
         }
 
         // Increment # reads processed
-        console.log("Read " + nbLines + "lines -- " + stats.reads + " reads total")
-
-        // Keep track of nb bytes read
-        var bytesRead = 0;
-        for(var i = 0; i < nbLines; i++)
-            bytesRead += chunk[i].length + 1; // +1 because of \n
-
-        // Update pointer (and support gzip)
-        if(!isGzip)
-            _fastqPtr[file.name] += bytesRead;
+        console.log("[parseChunk] Read " + nbLines + " lines - " + stats.reads + " reads total")
 
         // Update stats
         _fastqStats[file.name] = stats;
