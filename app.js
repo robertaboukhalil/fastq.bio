@@ -53,9 +53,9 @@ function launchURL(url)
             // Convert Blob to File
             var blob = request.response;
             blob.lastModifiedDate = new Date();
-            blob.name = url.split("/").reverse()[0];
+            // blob.name = url.split("/").reverse()[0];
             // Launch
-            launch(blob);
+            launch(new File([blob], url.split("/").reverse()[0]));
         };
         request.send();
 

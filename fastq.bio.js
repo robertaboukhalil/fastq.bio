@@ -80,7 +80,7 @@ var FASTQ = (function()
         // If gzip, need to start reading from beginning
         if(isGzip) {
             startPos = 0;
-            endPos   = _fastqBytes * _fastqN[file.name] / 4; // gzip ~ 4x compression?
+            endPos   = _fastqBytes * _fastqN[file.name] / 3; // gzip ~ 4x compression?
             _maxN    = 10;
         }
         // Otherwise, choose a random sampling point
