@@ -5,39 +5,68 @@
 
 
 
-// ---------------------------------------------------------------------
-// Launch analysis
-// ---------------------------------------------------------------------
+// =============================================================================
+// FASTQ Module
+// =============================================================================
 
-// Validate FASTQ file name
-function validate(file)
+function FASTQ(file)
 {
-    var status = { valid: false, message: "" },
-        fastqRegex = /.fastq|.fq|.fastq.gz|.fq.gz/;
+    this.file = file;
 
-    if(file == null || !("name" in file))
-        status.message = "Please choose a valid FASTQ file";
-    else if(!file.name.match(fastqRegex))
-        status.message = "Invalid FASTQ filename. Must end with .fastq, .fastq.gz, .fq, or .fq.gz";
-    else
-        status.valid = true;
+    // -------------------------------------------------------------------------
+    // Validate FASTQ file name
+    // -------------------------------------------------------------------------
+    this.validate = function()
+    {
+        var status = { valid: false, message: "" },
+            fastqRegex = /.fastq|.fq|.fastq.gz|.fq.gz/;
 
-    return status
+        if(this.file == null || !("name" in this.file))
+            status.message = "Please choose a valid FASTQ file";
+        else if(!this.file.name.match(fastqRegex))
+            status.message = "Invalid FASTQ filename <" + this.file.name + ">. \n\nMust end with .fastq, .fastq.gz, .fq, or .fq.gz";
+        else
+            status.valid = true;
+
+        return status;
+    }
+
+    // Launch
+    this.launch = function()
+    {
+        // - Launch WebWorker and pass File object
+        var worker = new Worker("worker.js");
+        // Define function to retrieve messages from worker
+        worker.onmessage = function(event)
+        {
+            console.info("Got message from Worker", event.data)
+        };
+        worker.postMessage({
+            file: this.file
+        });
+    }
 }
 
+
+// =============================================================================
+// Launch analysis
+// =============================================================================
+
 // 
+var fastq = null;
 function launch(file)
 {
+    fastq = new FASTQ(file);
+
     // Input validation
-    var status = validate(file);
-    console.log(status);
+    var status = fastq.validate();
     if(!status.valid) {
         alert(status.message);
         return;
     }
 
+    fastq.launch();
 
-    
     return;
 
     // Start reading file with a delay (prevent file open window from remaining visible)
@@ -71,9 +100,9 @@ function launch(file)
 }
 
 
-// -----------------------------------------------------------------------------
-// Handlers for buttons and drag & drop
-// -----------------------------------------------------------------------------
+// =============================================================================
+// UI Handlers
+// =============================================================================
 
 // Browse for files
 var arrEl = document.querySelectorAll(".btnNewFile");
@@ -108,7 +137,6 @@ function dragAndDrop(event)
         else
             f = dataTransfer.files[i];
 
-        FASTQ.reset();
         launch(f);
         return;
     }
