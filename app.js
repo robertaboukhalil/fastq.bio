@@ -4,6 +4,7 @@
 
 
 
+var debug = {};
 
 // =============================================================================
 // FASTQ Module
@@ -39,7 +40,8 @@ function FASTQ(file)
         // Define function to retrieve messages from worker
         worker.onmessage = function(event)
         {
-            console.info("Got message from Worker", event.data)
+            console.info("Got message from Worker!")
+            debug = event.data;
         };
         worker.postMessage({
             file: this.file
