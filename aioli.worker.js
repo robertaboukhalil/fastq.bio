@@ -6,6 +6,7 @@
 // Constants
 // -----------------------------------------------------------------------------
 
+DEBUG = false;
 DIR_DATA = "/data";
 VALID_ACTIONS = [ "init", "mount", "exec" ];
 
@@ -48,7 +49,8 @@ self.onmessage = function(msg)
 
     // Initialize Worker
     if(action == "init") {
-        self.importScripts(...config);
+        DEBUG = config.debug;
+        self.importScripts(...config.imports);
         FS.mkdir(DIR_DATA, 0777);
     }
 
@@ -85,7 +87,8 @@ self.onmessage = function(msg)
     // Execute WASM functions
     if(action == "exec")
     {
-        console.log(`[AioliWorker] Launching`, ...config);
+        if(DEBUG)
+            console.info(`[AioliWorker] Launching`, ...config);
 
         for(var i in config) {
             var c = config[i];
@@ -94,11 +97,11 @@ self.onmessage = function(msg)
         }
 
         // Launch function
-        console.time("AioliWorkerFunction");
+        console.time("AioliWorkerFunction-" + config[0]);
         self.state.running = config[0];
         Module.callMain(config);
         self.state.running = "";
-        console.timeEnd("AioliWorkerFunction");
+        console.timeEnd("AioliWorkerFunction-" + config[0]);
 
         // arguments: argc, argv*
         // fn = Module.cwrap("stk_fqchk", "string", ["number", "array"]);

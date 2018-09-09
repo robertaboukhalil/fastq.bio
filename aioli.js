@@ -4,8 +4,6 @@
 // =============================================================================
 
 WORKER_DIR = "aioli.worker.js";
-CHUNK_SIZE = 2 * 1024 * 1024;       // 2 MB
-REQUESTS = {};                      // Keep track requests to webworkers + callbacks
 DEBUG = false;
 
 
@@ -37,10 +35,13 @@ class Aioli
         this.worker.onmessage = this.workerCallback.bind(this);
     }
 
+    // Initialize WebWorker
     init()
     {
-        // Initialize WebWorker
-        return this.workerSend("init", this.imports);
+        return this.workerSend("init", {
+            debug: DEBUG,
+            imports: this.imports
+        });
     }
 
 
@@ -48,8 +49,7 @@ class Aioli
     // Utility functions
     // -------------------------------------------------------------------------
 
-    // Mount
-    // config = { files:[], blobs:[] }
+    // Mount: config = { files:[], blobs:[] }
     mount(config)
     {
         return this.workerSend("mount", config);
@@ -72,13 +72,15 @@ class Aioli
         var data = event.data;
 
         // Handle errors
-        if(data.action == "error" && this.rejects[this.n] != null) {
+        if(data.action == "error" && this.rejects[this.n] != null)
+        {
             Aioli.error(data.id, "-", data.message);
             this.rejects[this.n]();
         }
 
         // Handle callback signal
-        else if(data.action == "callback" && this.resolves[data.id] != null) {
+        else if(data.action == "callback" && this.resolves[data.id] != null)
+        {
             if(DEBUG)
                 Aioli.info(data.id, "-", data.message);
             this.resolves[data.id](data.message);

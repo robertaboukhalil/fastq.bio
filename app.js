@@ -1,110 +1,83 @@
-// TODO:
-// - Support URLs
-// - Add back ga() in launch()
-
 var debug = {};
+var app = null;
 
-// function Aioli(file)
-// {
-//     this.file = file;
-//     this.visited = [];
-
-//     // -------------------------------------------------------------------------
-//     // Launch WebWorker
-//     // -------------------------------------------------------------------------
-//     this.launch = function()
-//     {
-
-//         this.parseNextChunk();
-//     }
-
-//     this.parseNextChunk = function()
-//     {
-//         // Randomly sample from file
-//         var startPos = Math.floor(Math.random() * (this.file.size + 1)),
-//             endPos = Math.min(startPos + CHUNK_SIZE, this.file.size);
-
-//         // Get chunk of data from file
-//         var blob = this.file.slice(startPos, endPos);
-
-//         console.log( typeof(this.file) )
-//         console.log( typeof({
-//             name: this.file.name,
-//             data: blob
-//         }) )
-// return
-
-//         // Start parsing next chunk?
-//         // if()
-//     }
-// }
+DIR_WASM = "seqtk.js";
+CHUNK_SIZE = 2 * 1024 * 1024;       // 2 MB
 
 
 // =============================================================================
-// Launch analysis
+// fastq.bio class
 // =============================================================================
 
-// 
-var aioli = null;
-// var DIR_DATA = "/data";
-
-// 
-function launch(file)
+class FastqBio
 {
-    // Input validation
-    var status = fqValidate(file);
-    if(!status.valid) {
-        alert(status.message);
-        return;
+    constructor(file)
+    {
+        this.file = file;
+        this.aioli = null;
+
+        // Validate file name
+        var status = this.validate();
+        if(!status.valid) {
+            alert(status.message);
+            return;
+        }
+
+        // Create Aioli (and the WebWorker in which WASM code will run)
+        this.aioli = new Aioli({
+            imports: [ DIR_WASM ]
+        });
+
+        // Initialize WASM within WebWorker
+        this.aioli.init().then(d => {
+            this.sample();
+        });
     }
 
-    // Setup Aioli
-    var aioli = new Aioli({
-        // WASM .js files to load
-        imports: [
-            "seqtk.js"
-        ]
-    })
+    // -------------------------------------------------------------------------
+    // Validate FASTQ file name
+    // -------------------------------------------------------------------------
+    validate()
+    {
+        var status = { valid: false, message: "" },
+            fastqRegex = /.fastq|.fq|.fastq.gz|.fq.gz/;
 
-    aioli.init().then(d => {
-        console.log("init done");
+        if(this.file == null || !("name" in this.file))
+            status.message = "Please choose a valid FASTQ file";
+        else if(!this.file.name.match(fastqRegex))
+            status.message = "Invalid FASTQ filename <" + this.file.name + ">. \n\nMust end with .fastq, .fastq.gz, .fq, or .fq.gz";
+        else
+            status.valid = true;
 
+        return status;
+    }
+
+    // -------------------------------------------------------------------------
+    // Sample
+    // -------------------------------------------------------------------------
+    sample()
+    {
         // Randomly sample from file
-        var startPos = Math.floor(Math.random() * (file.size + 1)),
-            endPos = Math.min(startPos + CHUNK_SIZE, file.size);
+        var startPos = Math.floor(Math.random() * (this.file.size + 1)),
+            endPos = Math.min(startPos + CHUNK_SIZE, this.file.size);
 
         // Mount file chunk to filesystem
-        return aioli.mount({
+        this.aioli.mount({
             blobs: [{
-                name: file.name,
-                data: file.slice(startPos, endPos)
+                name: this.file.name,
+                data: this.file.slice(startPos, endPos)
             }]
+        }).then(d => {
+            return this.aioli.exec("comp", { filename: this.file.name });
+        }).then(d => {
+            console.log("-----------------------");
+            console.log(d);
+
+            // this.sample();
         });
-    }).then(d => {
-        return aioli.exec("comp", { filename: file.name });
-    }).then(d => {
-        console.log("-----------------------");
-        console.log(d);
-    });
+    }
 }
 
-// -------------------------------------------------------------------------
-// Validate FASTQ file name
-// -------------------------------------------------------------------------
-function fqValidate(file)
-{
-    var status = { valid: false, message: "" },
-        fastqRegex = /.fastq|.fq|.fastq.gz|.fq.gz/;
-
-    if(file == null || !("name" in file))
-        status.message = "Please choose a valid FASTQ file";
-    else if(!file.name.match(fastqRegex))
-        status.message = "Invalid FASTQ filename <" + file.name + ">. \n\nMust end with .fastq, .fastq.gz, .fq, or .fq.gz";
-    else
-        status.valid = true;
-
-    return status;
-}
 
 
 // =============================================================================
@@ -120,7 +93,7 @@ for(var i = 0; i < arrEl.length; i++)
 
 // A file has been selected
 document.querySelector("#upload").addEventListener("change", function(){
-    launch(this.files[0]);
+    app = new FastqBio(this.files[0]);
 });
 
 // Handle Drag and Drop
