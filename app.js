@@ -67,8 +67,12 @@ class FastqBio
                 name: this.file.name,
                 data: this.file.slice(startPos, endPos)
             }]
+        // Run fqchk on that chunk
         }).then(d => {
-            return this.aioli.exec("comp", { filename: this.file.name });
+            return this.aioli.exec("fqchk", {
+                filename: this.file.name
+            });
+        // Then gather results
         }).then(d => {
             console.log("-----------------------");
             console.log(d);
