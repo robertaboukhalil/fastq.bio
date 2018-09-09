@@ -80,16 +80,11 @@ self.onmessage = function(msg)
         // Keep track of mounted files
         for(var f of filesAndBlobs)
             self.state.files[f.name] = self.state.n;
-
-        // console.info(FS.readdir(dir));
     }
 
     // Execute WASM functions
     if(action == "exec")
     {
-        if(DEBUG)
-            console.info(`[AioliWorker] Launching`, ...config);
-
         for(var i in config) {
             var c = config[i];
             if(typeof(c) == "object" && "filename" in c)
@@ -97,11 +92,12 @@ self.onmessage = function(msg)
         }
 
         // Launch function
-        console.time("AioliWorkerFunction-" + config[0]);
-        self.state.running = config[0];
+        if(DEBUG) console.info(`[AioliWorker] Launching`, ...config);
+        console.time("AioliWorker - " + config[0]);
+        self.state.running = id;
         Module.callMain(config);
         self.state.running = "";
-        console.timeEnd("AioliWorkerFunction-" + config[0]);
+        console.timeEnd("AioliWorker - " + config[0]);
 
         // arguments: argc, argv*
         // fn = Module.cwrap("stk_fqchk", "string", ["number", "array"]);
@@ -110,7 +106,7 @@ self.onmessage = function(msg)
         self.postMessage({
             id: id,
             action: "callback",
-            message: self.state.output[config[0]]
+            message: self.state.output[id]
         });
         return;
     }
@@ -133,5 +129,7 @@ Module["noInitialRun"] = true;
 
 // Capture stdout
 Module["print"] = text => {
+    if(!(self.state.running in self.state.output))
+        self.state.output[self.state.running] = "";
     self.state.output[self.state.running] += text + "\n";
 };
