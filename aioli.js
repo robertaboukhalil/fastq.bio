@@ -1,11 +1,12 @@
 // =============================================================================
 // Aioli
-// Requires browser support for WebWorkers, WebAssembly, and ES6 Classes
+// Requires browser support for WebWorkers, WebAssembly, ES6 Classes, and ES6 Promises
 // =============================================================================
 
 WORKER_DIR = "aioli.worker.js";
 CHUNK_SIZE = 2 * 1024 * 1024;       // 2 MB
 REQUESTS = {};                      // Keep track requests to webworkers + callbacks
+DEBUG = false;
 
 
 class Aioli
@@ -54,6 +55,12 @@ class Aioli
         return this.workerSend("mount", config);
     }
 
+    // Launch WASM code
+    exec()
+    {
+        return this.workerSend("exec", [...arguments]);
+    }
+
 
     // -------------------------------------------------------------------------
     // Worker Communication
@@ -72,8 +79,9 @@ class Aioli
 
         // Handle callback signal
         else if(data.action == "callback" && this.resolves[data.id] != null) {
-            Aioli.info(data.id, "-", data.message);
-            this.resolves[data.id]();
+            if(DEBUG)
+                Aioli.info(data.id, "-", data.message);
+            this.resolves[data.id](data.message);
         }
 
         // console.log("<worker>");
@@ -82,7 +90,7 @@ class Aioli
     }
 
     // Send message to worker
-    workerSend(action, config, callback=null)
+    workerSend(action, config)
     {
         return new Promise((resolve, reject) =>
         {

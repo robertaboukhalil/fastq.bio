@@ -66,62 +66,26 @@ function launch(file)
         ]
     })
 
-    aioli.init()
-        .then(d => {
-            console.log("init done");
+    aioli.init().then(d => {
+        console.log("init done");
 
-            // Randomly sample from file
-            var startPos = Math.floor(Math.random() * (file.size + 1)),
-                endPos = Math.min(startPos + CHUNK_SIZE, file.size);
+        // Randomly sample from file
+        var startPos = Math.floor(Math.random() * (file.size + 1)),
+            endPos = Math.min(startPos + CHUNK_SIZE, file.size);
 
-            // Mount file chunk to filesystem
-            return aioli.mount({
-                blobs: [{
-                    name: "wat" + file.name,
-                    data: file.slice(startPos, endPos)
-                }]
-            });
-        }).then(d => {
-            console.log("ready22");
+        // Mount file chunk to filesystem
+        return aioli.mount({
+            blobs: [{
+                name: file.name,
+                data: file.slice(startPos, endPos)
+            }]
         });
-
-
-    // aioli.mount({
-    //     files: [file]
-    // });
-
-
-
-    // fastq.launch();
-
-    // // Start reading file with a delay (prevent file open window from remaining visible)
-    // document.querySelector(".spinner").style.display = "block";
-    // document.querySelector(".loadingfile").style.display = "block";
-    // document.querySelector(".loadingfile").innerHTML = "Parsing reads from <i>" + file.name + "</i>..."
-
-    // setTimeout(function()
-    // {
-    //     FASTQ.getNextChunk(file, {
-    //         preread: function() {
-    //             document.querySelector(".spinner").style.display = "block";
-    //             document.querySelector(".containerMain").style.display = "none";
-    //             document.querySelector(".containerPreview").style.display = "block";
-    //             document.querySelector("#headerBtnNewFile").style.display = "none";
-    //             document.querySelector("#headerBtnNewFile").disabled = true;
-    //         },
-    //         postread: function(fastqStats, samplingType) {
-    //             // plotStats(fastqStats, samplingType);
-    //             // launch(file);
-    //         },
-    //         lastread: function() {
-    //             document.querySelector(".spinner").style.display = "none";
-    //             document.querySelector(".loadingfile").style.display = "none";
-
-    //             document.querySelector("#headerBtnNewFile").style.display = "block";
-    //             document.querySelector("#headerBtnNewFile").disabled = false;
-    //         }
-    //     });
-    // }, 500);
+    }).then(d => {
+        return aioli.exec("comp", { filename: file.name });
+    }).then(d => {
+        console.log("-----------------------");
+        console.log(d);
+    });
 }
 
 // -------------------------------------------------------------------------

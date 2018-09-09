@@ -506,7 +506,6 @@ static int usage()
 
 int main(int argc, char *argv[])
 {
-	fprintf(stderr, "wat\n");
 	if (argc == 1) return usage();
 	if (strcmp(argv[1], "comp") == 0) return stk_comp(argc-1, argv+1);
 	else if (strcmp(argv[1], "fqchk") == 0) return stk_fqchk(argc-1, argv+1);

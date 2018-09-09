@@ -1,17 +1,32 @@
+// =============================================================================
+// WebWorker
+// =============================================================================
+
+// -----------------------------------------------------------------------------
+// Constants
+// -----------------------------------------------------------------------------
 
 DIR_DATA = "/data";
+VALID_ACTIONS = [ "init", "mount", "exec" ];
 
-VALID_ACTIONS = [
-    "init",
-    "mount"
-];
+// -----------------------------------------------------------------------------
+// State
+// -----------------------------------------------------------------------------
+self.state = {
+    // File management
+    n: 0,           // file ID
+    files: {},      // key: file ID, value: file/blob object
+    // 
+    output: {},     // key: wasm function
+    running: "",    // wasm function currently running
 
-FILES = {};
-
-N = 0;
+};
 
 
-// WebWorker setup
+// -----------------------------------------------------------------------------
+// Process incoming messages
+// -----------------------------------------------------------------------------
+
 self.onmessage = function(msg)
 {
     var data = msg.data;
@@ -42,17 +57,18 @@ self.onmessage = function(msg)
     if(action == "mount")
     {
         // Define folder for current batch of files
-        var dir = `${DIR_DATA}/${N++}`;
+        self.state.n++;
+        var dir = `${DIR_DATA}/${self.state.n}`;
 
         // Define file system to mount
         var fs = {}, filesAndBlobs = [];
         if("files" in config) {
             fs.files = config.files;
-            filesAndBlobs.concat(fs.files);
+            filesAndBlobs = filesAndBlobs.concat(fs.files);
         }
         if("blobs" in config) {
             fs.blobs = config.blobs;
-            filesAndBlobs.concat(fs.blobs);
+            filesAndBlobs = filesAndBlobs.concat(config.blobs);
         }
 
         // Create folder and mount
@@ -61,9 +77,39 @@ self.onmessage = function(msg)
 
         // Keep track of mounted files
         for(var f of filesAndBlobs)
-        FILES[f.name] = N;
-    
-        console.info(FS.readdir(dir));
+            self.state.files[f.name] = self.state.n;
+
+        // console.info(FS.readdir(dir));
+    }
+
+    // Execute WASM functions
+    if(action == "exec")
+    {
+        console.log(`[AioliWorker] Launching`, ...config);
+
+        for(var i in config) {
+            var c = config[i];
+            if(typeof(c) == "object" && "filename" in c)
+                config[i] = `${DIR_DATA}/${self.state.files[ c.filename ]}/${c.filename}`;
+        }
+
+        // Launch function
+        console.time("AioliWorkerFunction");
+        self.state.running = config[0];
+        Module.callMain(config);
+        self.state.running = "";
+        console.timeEnd("AioliWorkerFunction");
+
+        // arguments: argc, argv*
+        // fn = Module.cwrap("stk_fqchk", "string", ["number", "array"]);
+        // fn2 = fn(2, ["/data/" + worker.filename, ""]);
+
+        self.postMessage({
+            id: id,
+            action: "callback",
+            message: self.state.output[config[0]]
+        });
+        return;
     }
 
     self.postMessage({
@@ -74,58 +120,18 @@ self.onmessage = function(msg)
 }
 
 
+// -----------------------------------------------------------------------------
+// Emscripten module logic
+// -----------------------------------------------------------------------------
 
-// // =============================================================================
-// // Config
-// // =============================================================================
+// Defaults: don't auto-run C program once loaded
+Module = {};
+Module["noInitialRun"] = true;
 
-// // Worker state
-// WORKER = {
-//     // Worker filesystem folders
-//     dir: {
-//         root: "/data",
-//         input: "/data/input/",
-//         output: "/data/output/"
-//     },
-//     files: [],
-//     //
-//     interval: null,
-//     filename: null,
-//     ready: false,
-//     output: {
-//         sample: "",
-//         fqchk: ""
-//     },
-//     running: ""
-// }
-
-
-// // =============================================================================
-// // Worker logic
-// // =============================================================================
-
-// // Mount File object to worker's file system
-// self.onmessage = function(msg)
-// {
-//     worker.ready = true;
-//     console.log(FS.readdir(DIR_INPUT));
-// }
-
-
-// // =============================================================================
-// // Emscripten module logic
-// // =============================================================================
-
-// Module = {};
-// Module["noInitialRun"] = true;
-
-// // Capture printing to stdout
-// Module["print"] = function(text) {
-//     if(worker.running == "sample" || worker.running == "fqchk")
-//         worker.output[worker.running] += text + "\n";
-//     else
-//         console.log("stdout: " + text);
-// };
+// Capture stdout
+Module["print"] = text => {
+    self.state.output[self.state.running] += text + "\n";
+};
 
 // // On module load
 // Module["onRuntimeInitialized"] = function()
@@ -153,4 +159,23 @@ self.onmessage = function(msg)
 //         }
 //     }, 500);
 // };
+
+
+
+// // =============================================================================
+// // Config
+// // =============================================================================
+
+// // Worker state
+// WORKER = {
+//     interval: null,
+//     filename: null,
+//     ready: false,
+//     output: {
+//         sample: "",
+//         fqchk: ""
+//     },
+//     running: ""
+// }
+
 
