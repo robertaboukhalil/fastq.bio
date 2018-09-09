@@ -2,52 +2,42 @@
 // - Support URLs
 // - Add back ga() in launch()
 
-
-
 var debug = {};
 
-// =============================================================================
-// FASTQ Module
-// =============================================================================
+// function Aioli(file)
+// {
+//     this.file = file;
+//     this.visited = [];
 
-function FASTQ(file)
-{
-    this.file = file;
+//     // -------------------------------------------------------------------------
+//     // Launch WebWorker
+//     // -------------------------------------------------------------------------
+//     this.launch = function()
+//     {
 
-    // -------------------------------------------------------------------------
-    // Validate FASTQ file name
-    // -------------------------------------------------------------------------
-    this.validate = function()
-    {
-        var status = { valid: false, message: "" },
-            fastqRegex = /.fastq|.fq|.fastq.gz|.fq.gz/;
+//         this.parseNextChunk();
+//     }
 
-        if(this.file == null || !("name" in this.file))
-            status.message = "Please choose a valid FASTQ file";
-        else if(!this.file.name.match(fastqRegex))
-            status.message = "Invalid FASTQ filename <" + this.file.name + ">. \n\nMust end with .fastq, .fastq.gz, .fq, or .fq.gz";
-        else
-            status.valid = true;
+//     this.parseNextChunk = function()
+//     {
+//         // Randomly sample from file
+//         var startPos = Math.floor(Math.random() * (this.file.size + 1)),
+//             endPos = Math.min(startPos + CHUNK_SIZE, this.file.size);
 
-        return status;
-    }
+//         // Get chunk of data from file
+//         var blob = this.file.slice(startPos, endPos);
 
-    // Launch
-    this.launch = function()
-    {
-        // - Launch WebWorker and pass File object
-        var worker = new Worker("worker.js");
-        // Define function to retrieve messages from worker
-        worker.onmessage = function(event)
-        {
-            console.info("Got message from Worker!")
-            debug = event.data;
-        };
-        worker.postMessage({
-            file: this.file
-        });
-    }
-}
+//         console.log( typeof(this.file) )
+//         console.log( typeof({
+//             name: this.file.name,
+//             data: blob
+//         }) )
+// return
+
+//         // Start parsing next chunk?
+//         // if()
+//     }
+// }
 
 
 // =============================================================================
@@ -55,50 +45,101 @@ function FASTQ(file)
 // =============================================================================
 
 // 
-var fastq = null;
+var aioli = null;
+// var DIR_DATA = "/data";
+
+// 
 function launch(file)
 {
-    fastq = new FASTQ(file);
-
     // Input validation
-    var status = fastq.validate();
+    var status = fqValidate(file);
     if(!status.valid) {
         alert(status.message);
         return;
     }
 
-    fastq.launch();
+    // Setup Aioli
+    var aioli = new Aioli({
+        // WASM .js files to load
+        imports: [
+            "seqtk.js"
+        ]
+    })
 
-    return;
+    aioli.init()
+        .then(d => {
+            console.log("init done");
 
-    // Start reading file with a delay (prevent file open window from remaining visible)
-    document.querySelector(".spinner").style.display = "block";
-    document.querySelector(".loadingfile").style.display = "block";
-    document.querySelector(".loadingfile").innerHTML = "Parsing reads from <i>" + file.name + "</i>..."
+            // Randomly sample from file
+            var startPos = Math.floor(Math.random() * (file.size + 1)),
+                endPos = Math.min(startPos + CHUNK_SIZE, file.size);
 
-    setTimeout(function()
-    {
-        FASTQ.getNextChunk(file, {
-            preread: function() {
-                document.querySelector(".spinner").style.display = "block";
-                document.querySelector(".containerMain").style.display = "none";
-                document.querySelector(".containerPreview").style.display = "block";
-                document.querySelector("#headerBtnNewFile").style.display = "none";
-                document.querySelector("#headerBtnNewFile").disabled = true;
-            },
-            postread: function(fastqStats, samplingType) {
-                // plotStats(fastqStats, samplingType);
-                // launch(file);
-            },
-            lastread: function() {
-                document.querySelector(".spinner").style.display = "none";
-                document.querySelector(".loadingfile").style.display = "none";
-
-                document.querySelector("#headerBtnNewFile").style.display = "block";
-                document.querySelector("#headerBtnNewFile").disabled = false;
-            }
+            // Mount file chunk to filesystem
+            return aioli.mount({
+                blobs: [{
+                    name: "wat" + file.name,
+                    data: file.slice(startPos, endPos)
+                }]
+            });
+        }).then(d => {
+            console.log("ready22");
         });
-    }, 500);
+
+
+    // aioli.mount({
+    //     files: [file]
+    // });
+
+
+
+    // fastq.launch();
+
+    // // Start reading file with a delay (prevent file open window from remaining visible)
+    // document.querySelector(".spinner").style.display = "block";
+    // document.querySelector(".loadingfile").style.display = "block";
+    // document.querySelector(".loadingfile").innerHTML = "Parsing reads from <i>" + file.name + "</i>..."
+
+    // setTimeout(function()
+    // {
+    //     FASTQ.getNextChunk(file, {
+    //         preread: function() {
+    //             document.querySelector(".spinner").style.display = "block";
+    //             document.querySelector(".containerMain").style.display = "none";
+    //             document.querySelector(".containerPreview").style.display = "block";
+    //             document.querySelector("#headerBtnNewFile").style.display = "none";
+    //             document.querySelector("#headerBtnNewFile").disabled = true;
+    //         },
+    //         postread: function(fastqStats, samplingType) {
+    //             // plotStats(fastqStats, samplingType);
+    //             // launch(file);
+    //         },
+    //         lastread: function() {
+    //             document.querySelector(".spinner").style.display = "none";
+    //             document.querySelector(".loadingfile").style.display = "none";
+
+    //             document.querySelector("#headerBtnNewFile").style.display = "block";
+    //             document.querySelector("#headerBtnNewFile").disabled = false;
+    //         }
+    //     });
+    // }, 500);
+}
+
+// -------------------------------------------------------------------------
+// Validate FASTQ file name
+// -------------------------------------------------------------------------
+function fqValidate(file)
+{
+    var status = { valid: false, message: "" },
+        fastqRegex = /.fastq|.fq|.fastq.gz|.fq.gz/;
+
+    if(file == null || !("name" in file))
+        status.message = "Please choose a valid FASTQ file";
+    else if(!file.name.match(fastqRegex))
+        status.message = "Invalid FASTQ filename <" + file.name + ">. \n\nMust end with .fastq, .fastq.gz, .fq, or .fq.gz";
+    else
+        status.valid = true;
+
+    return status;
 }
 
 
