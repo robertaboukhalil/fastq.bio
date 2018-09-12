@@ -1,9 +1,13 @@
 var debug = {};
 var app = null;
 
-DIR_WASM = "seqtk.js";
+DIR_IMPORTS = [ "seqtk.js", "assets/papaparse/papaparse-4.6.0.min.js" ];
 CHUNK_SIZE = 1/8 * 1024 * 1024;  // in bytes
-
+COL_COMP_READLENGTH = 1;
+COL_COMP_A = 2;
+COL_COMP_C = 3;
+COL_COMP_G = 4;
+COL_COMP_T = 5;
 
 // =============================================================================
 // fastq.bio class
@@ -19,6 +23,17 @@ class FastqBio
         this.visited = [];  // array of visited byte ranges
         this.resamples = 0; // number of times resampled after couldn't find match
         this.chunks = 0;
+        // Histograms
+        this.hist = {
+            readlength: [],
+            gc: []
+        };
+        // Position-based stats (track raw counts and final %s)
+        this.stats_raw = {
+            A: {}, C: {}, G: {}, T: {}, N: {}, avgQ: {},
+            Atot: {}, Ctot: {}, Gtot: {}, Ttot: {}, Ntot: {}, avgQtot: {}
+        };
+        this.stats = {};
 
         // Validate file name
         var status = this.validate();
@@ -29,7 +44,7 @@ class FastqBio
 
         // Create Aioli (and the WebWorker in which WASM code will run)
         this.aioli = new Aioli({
-            imports: [ DIR_WASM ]
+            imports: DIR_IMPORTS
         });
 
         // Initialize WASM within WebWorker
@@ -63,7 +78,8 @@ class FastqBio
     {
         var sampling = this.sample();
         if(sampling.done) {
-            console.log("DONE");
+            console.log("--- Done ---");
+            debug = this;
             return;
         };
 
@@ -78,30 +94,70 @@ class FastqBio
                 data: this.file.slice(sampling.start, sampling.end)
             }]
 
-        // Run fqchk on chunk (stats as function of read position)
-        }).then(d => {
+        // Run comp on chunk (stats for GC composition + read length distribution)
+        }).then(() => {
             return this.aioli.exec("comp", {
                 filename: chunkName
             });
 
-        // // Run comp on chunk (stats for GC composition + read length distribution)
-        // }).then(d => {
-        //     console.log(d);
-
-        //     return this.aioli.exec("comp", {
-        //         filename: this.file.name
-        //     });
-
         // Then gather results
         }).then(d => {
-            console.log(d.slice(0,300));
-            console.log("- NEXT -");
+            for(var read of d.data)
+            {
+                // Ignore zero-length reads output by "seqtk comp". This happens because
+                // we're sampling random bytes from the FASTQ file, and will likely start
+                // reading from the middle of a read ==> seqtk returns readlength = 0
+                if(read[COL_COMP_READLENGTH] == 0)
+                    continue;
 
+                // Save read length
+                this.hist.readlength.push(read[COL_COMP_READLENGTH]);
+                // Save GC composition
+                this.hist.gc.push(read[COL_COMP_G] + read[COL_COMP_C]);
+            }
+
+            // Run fqchk
+            return this.aioli.exec("fqchk", {
+                filename: chunkName
+            });
+        // Run fqchk on chunk (stats as function of read position)
+        }).then(d => {
+            var data = d.data.slice(3),
+                header = {};
+            
+            var tmpHeader = d.data.slice(1, 2)[0];
+            for(var i in tmpHeader)
+                header[ tmpHeader[i] ] = i;
+
+            for(var row of data)
+            {
+                var pos = row[header["POS"]],
+                    nbBases = row[header["#bases"]];
+
+                if(!(pos in this.stats_raw.A))
+                    for(var k in this.stats_raw)
+                        this.stats_raw[k][pos] = 0;
+
+                // Base composition + avgQ stats
+                for(var base of ["A", "C", "G", "T", "N", "avgQ"]) {
+                    var header_name = base != "avgQ" ? `%${base}` : base;
+                    this.stats_raw[base][pos] += nbBases * row[header[header_name]]
+                    this.stats_raw[`${base}tot`][pos] += nbBases
+                }
+            }
+
+            // Normalize sum so far
+            for(var metric of ["A", "C", "G", "T", "N", "avgQ"])
+                this.stats[metric] = Object.keys(this.stats_raw[metric]).map( k => this.stats_raw[metric][k] / this.stats_raw[`${metric}tot`][k] );
+
+            // Process next chunk
             this.process();
         });
     }
 
+    // -------------------------------------------------------------------------
     // Find next region to sample from
+    // -------------------------------------------------------------------------
     sample()
     {
         this.resamples++;
