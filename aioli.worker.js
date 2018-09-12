@@ -106,7 +106,9 @@ self.onmessage = function(msg)
         self.postMessage({
             id: id,
             action: "callback",
-            message: self.state.output[id]
+            message: Papa.parse(self.state.output[id], {
+                dynamicTyping: true
+            })
         });
         return;
     }
