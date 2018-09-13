@@ -93,11 +93,11 @@ self.onmessage = function(msg)
 
         // Launch function
         if(DEBUG) console.info(`[AioliWorker] Launching`, ...config);
-        console.time("AioliWorker - " + config[0]);
+        if(DEBUG) console.time("AioliWorker - " + config[0]);
         self.state.running = id;
         Module.callMain(config);
         self.state.running = "";
-        console.timeEnd("AioliWorker - " + config[0]);
+        if(DEBUG) console.timeEnd("AioliWorker - " + config[0]);
 
         // arguments: argc, argv*
         // fn = Module.cwrap("stk_fqchk", "string", ["number", "array"]);

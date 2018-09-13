@@ -2,12 +2,17 @@ var debug = {};
 var app = null;
 
 DIR_IMPORTS = [ "seqtk.js", "assets/papaparse/papaparse-4.6.0.min.js" ];
+
 CHUNK_SIZE = 1/8 * 1024 * 1024;  // in bytes
+
 COL_COMP_READLENGTH = 1;
 COL_COMP_A = 2;
 COL_COMP_C = 3;
 COL_COMP_G = 4;
 COL_COMP_T = 5;
+
+var formatNb = nb => Number(nb).toLocaleString();
+
 
 // =============================================================================
 // fastq.bio class
@@ -20,9 +25,15 @@ class FastqBio
         // Internal state
         this.file = file;
         this.aioli = null;
-        this.visited = [];  // array of visited byte ranges
-        this.resamples = 0; // number of times resampled after couldn't find match
+        this.paused = false;
+        this.visited = [];       // array of visited byte ranges
+        this.resamples = 0;      // number of times resampled after couldn't find match
         this.chunks = 0;
+
+        // Plotting
+        this.plotIterations = 0; // number of times updated the plots
+        this.plotTimer = null;
+
         // Histograms
         this.hist = {
             readlength: [],
@@ -49,6 +60,10 @@ class FastqBio
 
         // Initialize WASM within WebWorker
         this.aioli.init().then(d => {
+            // Show empty plot and keep re-plotting
+            this.viz();
+            this.plotTimer = setInterval(() => this.viz(), 200);
+            // Launch first process
             this.process();
         });
     }
@@ -77,13 +92,19 @@ class FastqBio
     process()
     {
         var sampling = this.sample();
-        if(sampling.done) {
+        if(sampling.done || this.paused)
+        {
+            // One last update
+            this.paused = true;
+            clearInterval(this.plotTimer);
+            this.viz();
+
             console.log("--- Done ---");
             debug = this;
             return;
         };
 
-        console.log("Sampling ", sampling.start, "-->", sampling.end);
+        // console.log("Sampling ", sampling.start, "-->", sampling.end);
 
         // Mount file chunk to filesystem
         this.chunks++;
@@ -172,8 +193,10 @@ class FastqBio
             sampling.end = this.file.size;
         // Otherwise, sample randomly from file (test: startPos = 1068, endPos = 1780)
         else {
+            // Make first few iterations faster to show the plot for first time
+            var chunk_size = this.plotIterations < 5 ? CHUNK_SIZE / 32 : CHUNK_SIZE;
             sampling.start = Math.floor(Math.random() * (this.file.size + 1));
-            sampling.end = Math.min(sampling.start + CHUNK_SIZE, this.file.size);
+            sampling.end = Math.min(sampling.start + chunk_size, this.file.size);
         }
 
         // Have we already sampled this region?
@@ -226,6 +249,64 @@ class FastqBio
         this.visited.push([sampling.start, sampling.end]);
         return sampling;
     }
+
+    // -------------------------------------------------------------------------
+    // Update visualization
+    // -------------------------------------------------------------------------
+    viz()
+    {
+        this.updateProgress();
+
+        // Plot title
+        var plotInfo = `Sampled ${formatNb(this.hist.readlength.length)} reads`;
+
+        // Plot sequence content as function of position
+        // First time plotting:
+        if(this.plotIterations == 0)
+        {
+            var plotlyConfig = {
+                modeBarButtonsToRemove: [
+                    'sendDataToCloud', 'autoScale2d', 'hoverClosestCartesian',
+                    'hoverCompareCartesian', 'lasso2d', 'select2d', 'zoom2d',
+                    'pan2d', 'zoomIn2d', 'zoomOut2d', 'resetScale2d', 'toggleSpikelines'],
+                displaylogo: false, showTips: true
+            };
+    
+            Plotly.newPlot('plot-per-base-sequence-content', [
+                { y: this.stats.A, name: 'A' },
+                { y: this.stats.C, name: 'C' },
+                { y: this.stats.G, name: 'G' },
+                { y: this.stats.T, name: 'T' },
+                { y: this.stats.N, name: 'N' },
+            ], {
+                title: "Per Base Sequence Content<br>" + plotInfo,
+                xaxis: { title: "Read Position" },
+                yaxis: { title: "Composition" },
+            }, plotlyConfig);
+        }
+        // Otherwise, just update the plot
+        else
+        {
+            Plotly.update('plot-per-base-sequence-content', {
+                y: [ this.stats.A, this.stats.C, this.stats.G, this.stats.T, this.stats.N ]
+            });
+            Plotly.relayout('plot-per-base-sequence-content', {
+                title: "Per Base Sequence Content<br>" + plotInfo
+            });
+        }
+        this.plotIterations++;
+    }
+
+    // Update progress status in UI
+    updateProgress()
+    {
+        $(".spinner, .loadingfile, #btnStop").css("display", this.paused ? "none" : "block");
+        $(".loadingfile").html(`Sampled ${formatNb(this.hist.readlength.length)} reads...&nbsp;`);
+        $("#btnStop").off().click(() => {
+            $("#btnStop").prop("disabled", true);
+            this.paused = true}
+        );
+    }
 }
 
 
@@ -244,6 +325,8 @@ for(var i = 0; i < arrEl.length; i++)
 // A file has been selected
 document.querySelector("#upload").addEventListener("change", function(){
     app = new FastqBio(this.files[0]);
+    $(".containerMain").hide();
+    $(".containerPreview").show();
 });
 
 // Handle Drag and Drop

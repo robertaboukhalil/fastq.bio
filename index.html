@@ -30,11 +30,15 @@
             <div class="spinner" style="display:none"></div>
             <div style="color:#fff; font-size:13px; margin-left:15px;">
                 <ul class="navbar-nav mr-auto">
-                    <li class="nav-item loadingfile" style="display:none"></li>
+                    <li class="nav-item">
+                        <a id="btnStop" href="#" class="button btn btn-primary btn-sm" role="button" style="display:none">
+                            Stop
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <div class="btn btn-sm loadingfile" style="display:none">Loading...</div>
+                    </li>
                 </ul>
-            </div>
-            <div id="headerBtnNewFile" style="margin-left:0px; display:none">
-                <a href="/" target="_blank" class="button btn btn-primary btn-sm" role="button">New File</a>
             </div>
         </nav>
 
@@ -54,7 +58,14 @@
                 <p class="lead" style="color:#999"><a id="btnSample" href="#">Use Example FASTQ (NA12878)</a></p>
             </div>
             <div class="containerPreview jumbotron" style="text-align:center; border-radius:0; display:none; padding:5px 0 0 5px">
-                <div id="plot-per-base-sequence-content" style="width:33%; height:325px; float:left;"></div>
+
+                <div class="row">
+                    <div class="col-md6">
+                        <div id="plot-per-base-sequence-content" style="height:50vh"></div>
+                    </div>
+                </div>
+
+                <!-- <div id="plot-per-base-sequence-content" style="width:33%; height:325px; float:left;"></div>
                 <div style="max-width:3%; float:left;">&nbsp;</div>
                 <div id="plot-per-base-sequence-quality" style="width:33%; height:325px; float:left;"></div>
                 <div style="max-width:3%; float:left;">&nbsp;</div>
@@ -65,7 +76,7 @@
                 <div style="max-width:3%; float:left;">&nbsp;</div>
                 <div id="plot-dist-qual-per-read" style="width:33%; height:325px; float:left; margin-top:5px"></div>
                 <div style="max-width:3%; float:left;">&nbsp;</div>
-                <div id="plot-dist-seq-length" style="width:33%; height:325px; float:left; margin-top:5px"></div>
+                <div id="plot-dist-seq-length" style="width:33%; height:325px; float:left; margin-top:5px"></div> -->
             </div>
         </div>
 
