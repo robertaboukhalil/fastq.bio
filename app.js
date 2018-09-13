@@ -62,7 +62,7 @@ class FastqBio
         this.aioli.init().then(d => {
             // Show empty plot and keep re-plotting
             this.viz();
-            this.plotTimer = setInterval(() => this.viz(), 200);
+            this.plotTimer = setInterval(() => this.viz(), 500);
             // Launch first process
             this.process();
         });
@@ -121,7 +121,7 @@ class FastqBio
                 filename: chunkName
             });
 
-        // Then gather results
+        // Then gather gc results and run fqchk
         }).then(d => {
             for(var read of d.data)
             {
@@ -141,7 +141,8 @@ class FastqBio
             return this.aioli.exec("fqchk", {
                 filename: chunkName
             });
-        // Run fqchk on chunk (stats as function of read position)
+
+        // Gather fqchk results (stats as function of read position)
         }).then(d => {
             var data = d.data.slice(3),
                 header = {};
@@ -257,42 +258,64 @@ class FastqBio
     {
         this.updateProgress();
 
-        // Plot title
-        var plotInfo = `Sampled ${formatNb(this.hist.readlength.length)} reads`;
+        // Plot config
+        var plotInfo = `Sampled ${formatNb(this.hist.readlength.length)} reads`,
+            plotlyConfig = { modeBarButtonsToRemove: [ 'sendDataToCloud', 'autoScale2d', 'hoverClosestCartesian', 'hoverCompareCartesian', 'lasso2d', 'select2d', 'zoom2d', 'pan2d', 'zoomIn2d', 'zoomOut2d', 'resetScale2d', 'toggleSpikelines' ], displaylogo: false, showTips: true };
 
-        // Plot sequence content as function of position
-        // First time plotting:
-        if(this.plotIterations == 0)
+        // Define data to plot
+        // console.log(this.stats.avgQ)
+        var dataToPlot = {
+            "plot-per-base-sequence-content": {
+                data: ["A", "C", "G", "T", "N"].map(base => ({ y: this.stats[base], name: base })),
+                title: "Per Base Sequence Content",
+                titleX: "Read Position",
+                titleY: "Composition",
+                rangeY: [0, 50]
+            },
+            "plot-per-base-sequence-quality": {
+                data: [{ y: this.stats.avgQ, name: "avgQ" }],
+                title: "Per Base Sequence Quality",
+                titleX: "Read Position",
+                titleY: "Base Quality",
+                rangeY: [0, 50] // this.stats.avgQ == null ? null : Math.max(...this.stats.avgQ.filter(n => Number.isFinite(n))) * 1.1
+            },
+            "plot-dist-gc-content-per-read": {
+                data: [{ x: this.hist.gc, type: "histogram" }],
+                title: "Average GC Content per Read",
+                titleX: "GC Content",
+                titleY: "Counts",
+                rangeY: undefined
+            },
+            "plot-dist-seq-length": {
+                data: [{ x: this.hist.readlength, type: "histogram" }],
+                title: "Read Length Distribution",
+                titleX: "Read Length",
+                titleY: "Counts",
+                rangeY: undefined
+            }
+        };
+
+        for(var plotEl in dataToPlot)
         {
-            var plotlyConfig = {
-                modeBarButtonsToRemove: [
-                    'sendDataToCloud', 'autoScale2d', 'hoverClosestCartesian',
-                    'hoverCompareCartesian', 'lasso2d', 'select2d', 'zoom2d',
-                    'pan2d', 'zoomIn2d', 'zoomOut2d', 'resetScale2d', 'toggleSpikelines'],
-                displaylogo: false, showTips: true
-            };
-    
-            Plotly.newPlot('plot-per-base-sequence-content', [
-                { y: this.stats.A, name: 'A' },
-                { y: this.stats.C, name: 'C' },
-                { y: this.stats.G, name: 'G' },
-                { y: this.stats.T, name: 'T' },
-                { y: this.stats.N, name: 'N' },
-            ], {
-                title: "Per Base Sequence Content<br>" + plotInfo,
-                xaxis: { title: "Read Position" },
-                yaxis: { title: "Composition" },
-            }, plotlyConfig);
-        }
-        // Otherwise, just update the plot
-        else
-        {
-            Plotly.update('plot-per-base-sequence-content', {
-                y: [ this.stats.A, this.stats.C, this.stats.G, this.stats.T, this.stats.N ]
-            });
-            Plotly.relayout('plot-per-base-sequence-content', {
-                title: "Per Base Sequence Content<br>" + plotInfo
-            });
+            // console.log(plotEl);
+            var plot = dataToPlot[plotEl];
+
+            // First time plotting:
+            if(this.plotIterations == 0)
+            {
+                Plotly.newPlot(plotEl, plot.data, {
+                    title: `${plot.title}<br>${plotInfo}`,
+                    xaxis: { title: plot.titleX },
+                    yaxis: { title: plot.titleY, range: plot.rangeY }
+                }, plotlyConfig);
+            }
+            // Otherwise, just update the plot
+            else
+            {
+                Plotly.update(plotEl, { y: plot.data.map(obj => obj.y) });
+                Plotly.relayout(plotEl, { title: `${plot.title}<br>${plotInfo}`, "yaxis.range": plot.rangeY });
+                // this.paused = true;
+            }
         }
         this.plotIterations++;
     }
