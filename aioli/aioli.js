@@ -3,7 +3,7 @@
 // Requires browser support for WebWorkers, WebAssembly, ES6 Classes, and ES6 Promises
 // =============================================================================
 
-WORKER_DIR = "aioli.worker.js";
+WORKER_DIR = "aioli/aioli.worker.js";
 DEBUG = false;
 
 

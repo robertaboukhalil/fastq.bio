@@ -17,10 +17,9 @@ self.state = {
     // File management
     n: 0,           // file ID
     files: {},      // key: file ID, value: file/blob object
-    // 
+    // Function management
     output: {},     // key: wasm function
     running: "",    // wasm function currently running
-
 };
 
 
@@ -49,15 +48,21 @@ self.onmessage = function(msg)
 
     // Initialize Worker
     if(action == "init") {
+        console.time("AioliWorker - init");
+
         DEBUG = config.debug;
         self.importScripts(...config.imports);
         FS.mkdir(DIR_DATA, 0777);
+
+        console.timeEnd("AioliWorker - init");
     }
 
     // Mount file(s) and/or blob(s) to the Worker's file system
     // Can only mount a folder one at a time, so
     if(action == "mount")
     {
+        console.time("AioliWorker - mount");
+
         // Define folder for current batch of files
         self.state.n++;
         var dir = `${DIR_DATA}/${self.state.n}`;
@@ -80,6 +85,8 @@ self.onmessage = function(msg)
         // Keep track of mounted files
         for(var f of filesAndBlobs)
             self.state.files[f.name] = self.state.n;
+
+        console.timeEnd("AioliWorker - mount");
     }
 
     // Execute WASM functions
@@ -127,7 +134,7 @@ self.onmessage = function(msg)
 // Emscripten module logic
 // -----------------------------------------------------------------------------
 
-// Defaults: don't auto-run C program once loaded
+// Defaults: don't auto-run WASM program once loaded
 Module = {};
 Module["noInitialRun"] = true;
 
