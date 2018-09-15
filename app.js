@@ -259,7 +259,7 @@ class FastqBio
         this.updateProgress();
 
         // Plot config
-        var plotInfo = `Sampled ${formatNb(this.hist.readlength.length)} reads`,
+        var plotInfo = `${formatNb(this.hist.readlength.length)} reads`,
             plotlyConfig = { modeBarButtonsToRemove: [ 'sendDataToCloud', 'autoScale2d', 'hoverClosestCartesian', 'hoverCompareCartesian', 'lasso2d', 'select2d', 'zoom2d', 'pan2d', 'zoomIn2d', 'zoomOut2d', 'resetScale2d', 'toggleSpikelines' ], displaylogo: false, showTips: true };
 
         // Define data to plot
@@ -297,14 +297,13 @@ class FastqBio
 
         for(var plotEl in dataToPlot)
         {
-            // console.log(plotEl);
             var plot = dataToPlot[plotEl];
 
             // First time plotting:
             if(this.plotIterations == 0)
             {
                 Plotly.newPlot(plotEl, plot.data, {
-                    title: `${plot.title}<br>${plotInfo}`,
+                    title: `${plot.title} - ${plotInfo}`,
                     xaxis: { title: plot.titleX },
                     yaxis: { title: plot.titleY, range: plot.rangeY }
                 }, plotlyConfig);
@@ -313,8 +312,7 @@ class FastqBio
             else
             {
                 Plotly.update(plotEl, { y: plot.data.map(obj => obj.y) });
-                Plotly.relayout(plotEl, { title: `${plot.title}<br>${plotInfo}`, "yaxis.range": plot.rangeY });
-                // this.paused = true;
+                Plotly.relayout(plotEl, { title: `${plot.title} - ${plotInfo}`, "yaxis.range": plot.rangeY });
             }
         }
         this.plotIterations++;
