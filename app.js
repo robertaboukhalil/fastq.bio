@@ -3,7 +3,7 @@ var app = null;
 
 DIR_IMPORTS = [ "seqtk.js", "assets/papaparse/papaparse-4.6.0.min.js" ];
 
-CHUNK_SIZE = 1/8 * 1024 * 1024;  // in bytes
+CHUNK_SIZE = 1 * 1024 * 1024;  // in bytes
 
 COL_COMP_READLENGTH = 1;
 COL_COMP_A = 2;
@@ -91,6 +91,8 @@ class FastqBio
     // -------------------------------------------------------------------------
     process()
     {
+        console.time("process()");
+
         var sampling = this.sample();
         if(sampling.done || this.paused)
         {
@@ -98,8 +100,6 @@ class FastqBio
             this.paused = true;
             clearInterval(this.plotTimer);
             this.viz();
-
-            console.log("--- Done ---");
             debug = this;
             return;
         };
@@ -117,63 +117,46 @@ class FastqBio
 
         // Run comp on chunk (stats for GC composition + read length distribution)
         }).then(() => {
-            return this.aioli.exec("comp", {
-                filename: chunkName
-            });
 
-        // Then gather gc results and run fqchk
-        }).then(d => {
-            for(var read of d.data)
+            var chunk = { filename: chunkName };
+            var promiseComp = new Promise((resolve, reject) => {
+                this.aioli
+                    .exec("comp", chunk)
+                    .then(data => {
+                        console.time("parseOutputComp");
+                        this.parseOutputComp(data);
+                        console.timeEnd("parseOutputComp");
+                        resolve();
+                    });
+            }); 
+
+            var promiseFqchk = new Promise((resolve, reject) => {
+                this.aioli
+                    .exec("fqchk", chunk)
+                    .then(data => {
+                        console.time("parseOutputFqchk");
+                        this.parseOutputFqchk(data);
+                        console.timeEnd("parseOutputFqchk");
+                        resolve();
+                    });
+            }); 
+
+            Promise.all([ promiseComp, promiseFqchk ]).then((data) =>
             {
-                // Ignore zero-length reads output by "seqtk comp". This happens because
-                // we're sampling random bytes from the FASTQ file, and will likely start
-                // reading from the middle of a read ==> seqtk returns readlength = 0
-                if(read[COL_COMP_READLENGTH] == 0)
-                    continue;
+                console.timeEnd("process()");
 
-                // Save read length
-                this.hist.readlength.push(read[COL_COMP_READLENGTH]);
-                // Save GC composition
-                this.hist.gc.push(read[COL_COMP_G] + read[COL_COMP_C]);
-            }
+                // Process next chunk
+                this.process();
+                // console.log( this.hist.gc.length )
 
-            // Run fqchk
-            return this.aioli.exec("fqchk", {
-                filename: chunkName
+                // // Parse current chunk and update stats
+                // // this.parseOutput(...data);
+                // this.parseOutputComp(data[0]);
+                // this.parseOutputFqchk(data[1]);
+                // console.time("viz")
+                // this.viz();
+                // console.timeEnd("viz")
             });
-
-        // Gather fqchk results (stats as function of read position)
-        }).then(d => {
-            var data = d.data.slice(3),
-                header = {};
-            
-            var tmpHeader = d.data.slice(1, 2)[0];
-            for(var i in tmpHeader)
-                header[ tmpHeader[i] ] = i;
-
-            for(var row of data)
-            {
-                var pos = row[header["POS"]],
-                    nbBases = row[header["#bases"]];
-
-                if(!(pos in this.stats_raw.A))
-                    for(var k in this.stats_raw)
-                        this.stats_raw[k][pos] = 0;
-
-                // Base composition + avgQ stats
-                for(var base of ["A", "C", "G", "T", "N", "avgQ"]) {
-                    var header_name = base != "avgQ" ? `%${base}` : base;
-                    this.stats_raw[base][pos] += nbBases * row[header[header_name]]
-                    this.stats_raw[`${base}tot`][pos] += nbBases
-                }
-            }
-
-            // Normalize sum so far
-            for(var metric of ["A", "C", "G", "T", "N", "avgQ"])
-                this.stats[metric] = Object.keys(this.stats_raw[metric]).map( k => this.stats_raw[metric][k] / this.stats_raw[`${metric}tot`][k] );
-
-            // Process next chunk
-            this.process();
         });
     }
 
@@ -196,6 +179,7 @@ class FastqBio
         else {
             // Make first few iterations faster to show the plot for first time
             var chunk_size = this.plotIterations < 5 ? CHUNK_SIZE / 32 : CHUNK_SIZE;
+            chunk_size = CHUNK_SIZE
             sampling.start = Math.floor(Math.random() * (this.file.size + 1));
             sampling.end = Math.min(sampling.start + chunk_size, this.file.size);
         }
@@ -263,7 +247,6 @@ class FastqBio
             plotlyConfig = { modeBarButtonsToRemove: [ 'sendDataToCloud', 'autoScale2d', 'hoverClosestCartesian', 'hoverCompareCartesian', 'lasso2d', 'select2d', 'zoom2d', 'pan2d', 'zoomIn2d', 'zoomOut2d', 'resetScale2d', 'toggleSpikelines' ], displaylogo: false, showTips: true };
 
         // Define data to plot
-        // console.log(this.stats.avgQ)
         var dataToPlot = {
             "plot-per-base-sequence-content": {
                 data: ["A", "C", "G", "T", "N"].map(base => ({ y: this.stats[base], name: base })),
@@ -327,6 +310,63 @@ class FastqBio
             $("#btnStop").prop("disabled", true);
             this.paused = true}
         );
+    }
+
+    // Parse seqtk output
+    parseOutputComp(dataComp)
+    {
+        if(dataComp.length == 0)
+            return;
+
+        // Parse comp output
+        for(var read of dataComp.data)
+        {
+            // Ignore zero-length reads output by "seqtk comp". This happens because
+            // we're sampling random bytes from the FASTQ file, and will likely start
+            // reading from the middle of a read ==> seqtk returns readlength = 0
+            if(read[COL_COMP_READLENGTH] == 0)
+                continue;
+
+            // Save read length
+            this.hist.readlength.push(read[COL_COMP_READLENGTH]);
+            // Save GC composition
+            this.hist.gc.push(read[COL_COMP_G] + read[COL_COMP_C]);
+        }
+    }
+
+    parseOutputFqchk(dataFqchk)
+    {
+        if(dataFqchk.length == 0)
+            return;
+        var data = dataFqchk.data.slice(3),
+
+        // Parse header
+        header = {};
+        var tmpHeader = dataFqchk.data.slice(1, 2)[0];
+        for(var i in tmpHeader)
+            header[ tmpHeader[i] ] = i;
+
+        // Parse stats
+        for(var row of data)
+        {
+            var pos = row[header["POS"]],
+                nbBases = row[header["#bases"]];
+
+            if(!(pos in this.stats_raw.A))
+                for(var k in this.stats_raw)
+                    this.stats_raw[k][pos] = 0;
+
+            // Base composition + avgQ stats
+            for(var base of ["A", "C", "G", "T", "N", "avgQ"]) {
+                var header_name = base != "avgQ" ? `%${base}` : base;
+                this.stats_raw[base][pos] += nbBases * row[header[header_name]]
+                this.stats_raw[`${base}tot`][pos] += nbBases
+            }
+        }
+
+        // Normalize sum so far
+        for(var metric of ["A", "C", "G", "T", "N", "avgQ"])
+            this.stats[metric] = Object.keys(this.stats_raw[metric]).map( k => this.stats_raw[metric][k] / this.stats_raw[`${metric}tot`][k] );
     }
 }
 
