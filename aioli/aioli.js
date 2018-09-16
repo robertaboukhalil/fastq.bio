@@ -1,11 +1,15 @@
 // =============================================================================
 // Aioli
+// -----------------------------------------------------------------------------
+// This file handles communication between the app and the WebWorker
 // Requires browser support for WebWorkers, WebAssembly, ES6 Classes, and ES6 Promises
 // =============================================================================
 
+// TODO: check for browser support
+// if (window.File && window.FileReader && window.FileList && window.Blob)
+
 WORKER_DIR = "aioli/aioli.worker.js";
 DEBUG = false;
-
 
 class Aioli
 {

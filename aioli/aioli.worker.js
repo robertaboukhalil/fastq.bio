@@ -6,13 +6,16 @@
 // Constants
 // -----------------------------------------------------------------------------
 
+MB = 1024 * 1024;
 DEBUG = false;
 DIR_DATA = "/data";
 VALID_ACTIONS = [ "init", "mount", "exec" ];
 
+
 // -----------------------------------------------------------------------------
 // State
 // -----------------------------------------------------------------------------
+
 self.state = {
     // File management
     n: 0,           // file ID
@@ -23,9 +26,9 @@ self.state = {
 };
 
 
-// -----------------------------------------------------------------------------
+// =============================================================================
 // Process incoming messages
-// -----------------------------------------------------------------------------
+// =============================================================================
 
 self.onmessage = function(msg)
 {
@@ -48,21 +51,15 @@ self.onmessage = function(msg)
 
     // Initialize Worker
     if(action == "init") {
-        console.time("AioliWorker - init");
-
         DEBUG = config.debug;
         self.importScripts(...config.imports);
         FS.mkdir(DIR_DATA, 0777);
-
-        console.timeEnd("AioliWorker - init");
     }
 
     // Mount file(s) and/or blob(s) to the Worker's file system
     // Can only mount a folder one at a time, so
     if(action == "mount")
     {
-        console.time("AioliWorker - mount");
-
         // Define folder for current batch of files
         self.state.n++;
         var dir = `${DIR_DATA}/${self.state.n}`;
@@ -85,8 +82,6 @@ self.onmessage = function(msg)
         // Keep track of mounted files
         for(var f of filesAndBlobs)
             self.state.files[f.name] = self.state.n;
-
-        console.timeEnd("AioliWorker - mount");
     }
 
     // Execute WASM functions
@@ -100,13 +95,11 @@ self.onmessage = function(msg)
 
         // Launch function
         if(DEBUG) console.info(`[AioliWorker] Launching`, ...config);
-        // if(DEBUG)
-            console.time("AioliWorker - " + config[0]);
+        if(DEBUG) console.time("[AioliWorker] " + config[0]);
         self.state.running = id;
         Module.callMain(config);
         self.state.running = "";
-        // if(DEBUG)
-            console.timeEnd("AioliWorker - " + config[0]);
+        if(DEBUG) console.timeEnd("[AioliWorker] " + config[0]);
 
         // arguments: argc, argv*
         // fn = Module.cwrap("stk_fqchk", "string", ["number", "array"]);
@@ -130,9 +123,9 @@ self.onmessage = function(msg)
 }
 
 
-// -----------------------------------------------------------------------------
+// =============================================================================
 // Emscripten module logic
-// -----------------------------------------------------------------------------
+// =============================================================================
 
 // Defaults: don't auto-run WASM program once loaded
 Module = {};
@@ -144,3 +137,92 @@ Module["print"] = text => {
         self.state.output[self.state.running] = "";
     self.state.output[self.state.running] += text + "\n";
 };
+
+
+// =============================================================================
+// Sampling logic
+// =============================================================================
+
+class AioliSampling
+{
+    constructor(file)
+    {
+        this.file = file;         // File or Blob to sample from
+        this.visited = [];        // List of ranges already visited
+        this.redraws = 0;         // Number of consecutive times we redraw random positions to sample
+
+        // TODO: make these configurable
+        this.maxRedraws = 10;     // Max number of consecutive redraws
+        this.chunkSize = 1 * MB;  // Chunk size to read from
+        this.smallFileFactor = 5; // Define a small file as N * chunkSize
+    }
+
+
+    // -------------------------------------------------------------------------
+    // Find next region to sample from file
+    // -------------------------------------------------------------------------
+
+    nextRegion()
+    {
+        this.redraws++;
+        var sampling = {
+            start: 0,
+            end: 0,
+            done: false
+        };
+
+        // If small file, don't sample; use the whole file
+        if(this.file.size <= this.chunkSize * this.smallFileFactor)
+            sampling.end = this.file.size;
+        // Otherwise, sample randomly from file (test: startPos = 1068, endPos = 1780)
+        else {
+            sampling.start = Math.floor(Math.random() * (this.file.size + 1));
+            sampling.end = Math.min(sampling.start + this.chunkSize, this.file.size);
+        }
+
+        // Have we already sampled this region?
+        var reSample = false;
+        for(var range of this.visited)
+        {
+            // --------vvvvvvvvvv---
+            //            ssss->
+            if(sampling.start >= range[0] && sampling.start <= range[1])
+                // --------vvvvvvvvvv---
+                //             ssss
+                if(sampling.end <= range[1])
+                    reSample = true;
+                // --------vvvvvvvvvv---
+                //                ssssss
+                else
+                    sampling.start = range[1];
+
+            // --------vvvvvvvvvv---
+            //            <-sss
+            if(sampling.end >= range[0] && sampling.end <= range[1])
+                // --------vvvvvvvvvv---
+                //            sssss
+                if(sampling.start >= range[0])
+                    reSample = true;
+                // --------vvvvvvvvvv---
+                //    sssssssssssss
+                else
+                    sampling.end = range[0];
+
+            if(reSample)
+                break;
+            console.log(`[AioliSampling] - ${sampling.start} --> ${sampling.end}`);
+        }
+
+        // If too many consecutive redraws, stop sampling
+        if(this.redraws > this.maxRedraws)
+            sampling.done = true;
+        else if(reSample)
+            return this.nextRegion();
+        else
+            this.redraws = 0;
+
+        // Mark current range as visited
+        this.visited.push([ sampling.start, sampling.end ]);
+        return sampling;
+    }
+}
