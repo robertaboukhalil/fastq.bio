@@ -63,8 +63,11 @@ class FastqBio
             // Show empty plot and keep re-plotting
             this.viz();
             this.plotTimer = setInterval(() => this.viz(), 500);
-            // Launch first process
-            this.process();
+            // Mount file
+            this.mount().then(() => {
+                // Start sampling file
+                this.process();
+            });
         });
     }
 
@@ -87,77 +90,100 @@ class FastqBio
     }
 
     // -------------------------------------------------------------------------
+    // Mount file to WebWorker FS
+    // -------------------------------------------------------------------------
+    mount()
+    {
+        return this.aioli.mount({
+            files: [ this.file ]
+        });
+    }
+
+    // -------------------------------------------------------------------------
     // Process data
     // -------------------------------------------------------------------------
     process()
     {
-        console.time("process()");
-
-        var sampling = this.sample();
-        if(sampling.done || this.paused)
-        {
-            // One last update
-            this.paused = true;
-            clearInterval(this.plotTimer);
-            this.viz();
-            debug = this;
-            return;
-        };
-
-        // console.log("Sampling ", sampling.start, "-->", sampling.end);
-
-        // Mount file chunk to filesystem
-        this.chunks++;
-        var chunkName = `c${this.chunks}-${this.file.name}`;
-        this.aioli.mount({
-            blobs: [{
-                name: chunkName,
-                data: this.file.slice(sampling.start, sampling.end)
-            }]
-
-        // Run comp on chunk (stats for GC composition + read length distribution)
-        }).then(() => {
-
-            var chunk = { filename: chunkName };
-            var promiseComp = new Promise((resolve, reject) => {
-                this.aioli
-                    .exec("comp", chunk)
-                    .then(data => {
-                        console.time("parseOutputComp");
-                        this.parseOutputComp(data);
-                        console.timeEnd("parseOutputComp");
-                        resolve();
-                    });
-            }); 
-
-            var promiseFqchk = new Promise((resolve, reject) => {
-                this.aioli
-                    .exec("fqchk", chunk)
-                    .then(data => {
-                        console.time("parseOutputFqchk");
-                        this.parseOutputFqchk(data);
-                        console.timeEnd("parseOutputFqchk");
-                        resolve();
-                    });
-            }); 
-
-            Promise.all([ promiseComp, promiseFqchk ]).then((data) =>
-            {
-                console.timeEnd("process()");
-
-                // Process next chunk
-                this.process();
-                // console.log( this.hist.gc.length )
-
-                // // Parse current chunk and update stats
-                // // this.parseOutput(...data);
-                // this.parseOutputComp(data[0]);
-                // this.parseOutputFqchk(data[1]);
-                // console.time("viz")
-                // this.viz();
-                // console.timeEnd("viz")
-            });
+        console.time("abc");
+        return this.aioli.sample(this.file, "isValidFastqChunk").then((d) => {
+            console.log(d);
+            console.timeEnd("abc");
         });
+
+
+
+
+
+        return;
+
+        // console.time("process()");
+
+        // var sampling = this.sample();
+        // if(sampling.done || this.paused)
+        // {
+        //     // One last update
+        //     this.paused = true;
+        //     clearInterval(this.plotTimer);
+        //     this.viz();
+        //     debug = this;
+        //     return;
+        // };
+
+        // // Mount file chunk to filesystem
+        // this.chunks++;
+        // var chunkName = `c${this.chunks}-${this.file.name}`;
+        // this.aioli.mount({
+        //     blobs: [{
+        //         name: chunkName,
+        //         data: this.file.slice(sampling.start, sampling.end)
+        //     }]
+
+        // // Run comp on chunk (stats for GC composition + read length distribution)
+        // }).then(() => {
+
+        //     var chunk = { filename: chunkName };
+        //     var promiseComp = new Promise((resolve, reject) => {
+        //         this.aioli
+        //             .exec("comp", chunk)
+        //             .then(data => {
+        //                 console.time("parseOutputComp");
+        //                 this.parseOutputComp(data);
+        //                 console.timeEnd("parseOutputComp");
+        //                 resolve();
+        //             });
+        //     }); 
+
+        //     var promiseFqchk = new Promise((resolve, reject) => {
+        //         this.aioli
+        //             .exec("fqchk", chunk)
+        //             .then(data => {
+        //                 console.time("parseOutputFqchk");
+        //                 this.parseOutputFqchk(data);
+        //                 console.timeEnd("parseOutputFqchk");
+        //                 resolve();
+        //             });
+        //     }); 
+
+        //     promiseFqchk();
+        //     promiseComp();
+
+        //     // Promise.all([ promiseComp, promiseFqchk ]).then((data) =>
+        //     // {
+        //     //     console.timeEnd("process()");
+
+        //     //     // Process next chunk
+        //     //     this.process();
+        //     //     // console.log( this.hist.gc.length )
+
+        //     //     // // Parse current chunk and update stats
+        //     //     // // this.parseOutput(...data);
+        //     //     // this.parseOutputComp(data[0]);
+        //     //     // this.parseOutputFqchk(data[1]);
+        //     //     // console.time("viz")
+        //     //     // this.viz();
+        //     //     // console.timeEnd("viz")
+        //     // });
+        // });
     }
 
     // -------------------------------------------------------------------------

@@ -9,7 +9,7 @@
 MB = 1024 * 1024;
 DEBUG = false;
 DIR_DATA = "/data";
-VALID_ACTIONS = [ "init", "mount", "exec" ];
+VALID_ACTIONS = [ "init", "mount", "exec", "sample" ];
 
 
 // -----------------------------------------------------------------------------
@@ -19,7 +19,8 @@ VALID_ACTIONS = [ "init", "mount", "exec" ];
 self.state = {
     // File management
     n: 0,           // file ID
-    files: {},      // key: file ID, value: file/blob object
+    files: {},      // key: file ID, value: {id:n, sampling:AioliSampling}
+    reader: new FileReader(),
     // Function management
     output: {},     // key: wasm function
     running: "",    // wasm function currently running
@@ -35,7 +36,8 @@ self.onmessage = function(msg)
     var data = msg.data;
     var id = data.id,
         action = data.action,
-        config = data.config;
+        config = data.config,
+        returnValue = null;
 
     // Valid actions
     // TODO: validate configs
@@ -49,15 +51,19 @@ self.onmessage = function(msg)
         return;
     }
 
+    // -------------------------------------------------------------------------
     // Initialize Worker
+    // -------------------------------------------------------------------------
     if(action == "init") {
         DEBUG = config.debug;
-        self.importScripts(...config.imports);
+        self.importScripts('aioli.user.js', ...config.imports);
         FS.mkdir(DIR_DATA, 0777);
     }
 
+    // -------------------------------------------------------------------------
     // Mount file(s) and/or blob(s) to the Worker's file system
     // Can only mount a folder one at a time, so
+    // -------------------------------------------------------------------------
     if(action == "mount")
     {
         // Define folder for current batch of files
@@ -81,16 +87,21 @@ self.onmessage = function(msg)
 
         // Keep track of mounted files
         for(var f of filesAndBlobs)
-            self.state.files[f.name] = self.state.n;
+            self.state.files[f.name] = {
+                id: self.state.n,
+                sampling: new AioliSampling(f)
+            }
     }
 
+    // -------------------------------------------------------------------------
     // Execute WASM functions
+    // -------------------------------------------------------------------------
     if(action == "exec")
     {
         for(var i in config) {
             var c = config[i];
             if(typeof(c) == "object" && "filename" in c)
-                config[i] = `${DIR_DATA}/${self.state.files[ c.filename ]}/${c.filename}`;
+                config[i] = getFilePath(c);
         }
 
         // Launch function
@@ -105,21 +116,47 @@ self.onmessage = function(msg)
         // fn = Module.cwrap("stk_fqchk", "string", ["number", "array"]);
         // fn2 = fn(2, ["/data/" + worker.filename, ""]);
 
-        self.postMessage({
-            id: id,
-            action: "callback",
-            message: Papa.parse(self.state.output[id], {
-                dynamicTyping: true
-            })
+        returnValue = Papa.parse(self.state.output[id], {
+            dynamicTyping: true
         });
+    }
+
+    // -------------------------------------------------------------------------
+    // Sample file and return valid chunk range
+    // -------------------------------------------------------------------------
+    if(action == "sample")
+    {
+        var file = config.file,
+            sampling = getFileInfo(file).sampling,
+            fnValidChunk = CALLBACKS[config.isValidChunk];
+
+            // Catch promise and return message when ready
+            sampling.nextRegion(fnValidChunk)
+                    .then((d) => {
+                        self.postMessage({
+                            id: id,
+                            action: "callback",
+                            message: d
+                        });        
+                    });
         return;
     }
 
-    self.postMessage({
-        id: id,
-        action: "callback",
-        message: "ready"
-    });
+    // -------------------------------------------------------------------------
+    // Send message back
+    // -------------------------------------------------------------------------
+    if(returnValue != null)
+        self.postMessage({
+            id: id,
+            action: "callback",
+            message: returnValue
+        });
+    else
+        self.postMessage({
+            id: id,
+            action: "callback",
+            message: "ready"
+        });
 }
 
 
@@ -154,6 +191,7 @@ class AioliSampling
         // TODO: make these configurable
         this.maxRedraws = 10;     // Max number of consecutive redraws
         this.chunkSize = 1 * MB;  // Chunk size to read from
+        this.chunkSizeValid = 1/512 * MB;  // Chunk size to read to determine whether chunk if valid
         this.smallFileFactor = 5; // Define a small file as N * chunkSize
     }
 
@@ -162,7 +200,7 @@ class AioliSampling
     // Find next region to sample from file
     // -------------------------------------------------------------------------
 
-    nextRegion()
+    nextRegion(isValidChunk)
     {
         this.redraws++;
         var sampling = {
@@ -170,6 +208,12 @@ class AioliSampling
             end: 0,
             done: false
         };
+
+        // If too many consecutive redraws, stop sampling
+        if(this.redraws > this.maxRedraws) {
+            sampling.done = true;
+            return sampling;
+        }
 
         // If small file, don't sample; use the whole file
         if(this.file.size <= this.chunkSize * this.smallFileFactor)
@@ -212,17 +256,46 @@ class AioliSampling
                 break;
             console.log(`[AioliSampling] - ${sampling.start} --> ${sampling.end}`);
         }
-
-        // If too many consecutive redraws, stop sampling
-        if(this.redraws > this.maxRedraws)
-            sampling.done = true;
-        else if(reSample)
+        if(reSample)
             return this.nextRegion();
         else
             this.redraws = 0;
 
-        // Mark current range as visited
-        this.visited.push([ sampling.start, sampling.end ]);
-        return sampling;
+        // Narrow down sampling region to valid start byte
+        return new Promise((resolve, reject) => {
+            self.state.reader.readAsBinaryString(this.file.slice(
+                sampling.start,
+                Math.min(sampling.end, sampling.start + this.chunkSizeValid)
+            ));
+
+            // Increment byte start till we get the correct byteOffset
+            self.state.reader.onload = () => {
+                var chunk = self.state.reader.result;
+                var byteOffset = 0;
+                while(!isValidChunk(chunk.slice(byteOffset)))
+                    byteOffset++;
+
+                // Mark current range as visited
+                this.visited.push([ sampling.start + byteOffset, sampling.end ]);
+                return resolve(sampling);
+            };
+        });
     }
+}
+
+
+// =============================================================================
+// Utility functions
+// =============================================================================
+
+// Given File object, get its path on the virtual FS
+function getFilePath(file)
+{
+    return `${DIR_DATA}/${getFileInfo(file).id}/${file.name}`;
+}
+
+// Given File object, return info about it
+function getFileInfo(file)
+{
+    return self.state.files[file.name];
 }

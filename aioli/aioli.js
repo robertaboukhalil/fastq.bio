@@ -65,6 +65,15 @@ class Aioli
         return this.workerSend("exec", [...arguments]);
     }
 
+    // Sample from file (isValidChunk returns true if given chunk if valid)
+    sample(file, isValidChunkFnName)
+    {
+        return this.workerSend("sample", {
+            file: file,
+            isValidChunk: isValidChunkFnName
+        });
+    }
+
 
     // -------------------------------------------------------------------------
     // Worker Communication
