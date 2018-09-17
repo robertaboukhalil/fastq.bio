@@ -36,127 +36,54 @@ self.onmessage = function(msg)
     var data = msg.data;
     var id = data.id,
         action = data.action,
-        config = data.config,
-        returnValue = null;
+        config = data.config;
 
     // Valid actions
-    // TODO: validate configs
-    if(VALID_ACTIONS.indexOf(action) == -1)
-    {
-        self.postMessage({
-            id: id,
-            action: "error",
-            message: `Invalid action <${action}>.`
-        });
+    if(VALID_ACTIONS.indexOf(action) == -1) {
+        AioliWorker.postMessage(id, `Invalid action <${action}>.`, "error");
         return;
     }
 
     // -------------------------------------------------------------------------
-    // Initialize Worker
+    // Handle actions
     // -------------------------------------------------------------------------
-    if(action == "init") {
-        DEBUG = config.debug;
-        self.importScripts('aioli.user.js', ...config.imports);
-        FS.mkdir(DIR_DATA, 0777);
+
+    if(action == "init")
+    {
+        console.time("init");
+        AioliWorker.init(config);
+        AioliWorker.postMessage(id);        
+        console.timeEnd("init");
     }
 
-    // -------------------------------------------------------------------------
-    // Mount file(s) and/or blob(s) to the Worker's file system
-    // Can only mount a folder one at a time, so
-    // -------------------------------------------------------------------------
     if(action == "mount")
     {
-        // Define folder for current batch of files
-        self.state.n++;
-        var dir = `${DIR_DATA}/${self.state.n}`;
-
-        // Define file system to mount
-        var fs = {}, filesAndBlobs = [];
-        if("files" in config) {
-            fs.files = config.files;
-            filesAndBlobs = filesAndBlobs.concat(fs.files);
-        }
-        if("blobs" in config) {
-            fs.blobs = config.blobs;
-            filesAndBlobs = filesAndBlobs.concat(config.blobs);
-        }
-
-        // Create folder and mount
-        FS.mkdir(dir, 0777);
-        FS.mount(WORKERFS, fs, dir);
-
-        // Keep track of mounted files
-        for(var f of filesAndBlobs)
-            self.state.files[f.name] = {
-                id: self.state.n,
-                sampling: new AioliSampling(f)
-            }
+        console.time("mount");
+        AioliWorker.mount(config);
+        AioliWorker.postMessage(id);
+        console.timeEnd("mount");
     }
 
-    // -------------------------------------------------------------------------
-    // Execute WASM functions
-    // -------------------------------------------------------------------------
     if(action == "exec")
     {
-        for(var i in config) {
-            var c = config[i];
-            if(typeof(c) == "object" && "filename" in c)
-                config[i] = getFilePath(c);
-        }
-
-        // Launch function
-        if(DEBUG) console.info(`[AioliWorker] Launching`, ...config);
-        if(DEBUG) console.time("[AioliWorker] " + config[0]);
         self.state.running = id;
-        Module.callMain(config);
+        console.time("exec");
+        AioliWorker.exec(config);
+        console.timeEnd("exec");
         self.state.running = "";
-        if(DEBUG) console.timeEnd("[AioliWorker] " + config[0]);
-
-        // arguments: argc, argv*
-        // fn = Module.cwrap("stk_fqchk", "string", ["number", "array"]);
-        // fn2 = fn(2, ["/data/" + worker.filename, ""]);
-
-        returnValue = Papa.parse(self.state.output[id], {
+        AioliWorker.postMessage(id, Papa.parse(self.state.output[id], {
             dynamicTyping: true
-        });
+        }));
     }
 
-    // -------------------------------------------------------------------------
-    // Sample file and return valid chunk range
-    // -------------------------------------------------------------------------
     if(action == "sample")
     {
-        var file = config.file,
-            sampling = getFileInfo(file).sampling,
-            fnValidChunk = CALLBACKS[config.isValidChunk];
-
-            // Catch promise and return message when ready
-            sampling.nextRegion(fnValidChunk)
-                    .then((d) => {
-                        self.postMessage({
-                            id: id,
-                            action: "callback",
-                            message: d
-                        });        
-                    });
-        return;
+        console.time("sample");
+        AioliWorker.sample(config).then((range) => {
+            console.timeEnd("sample");
+            AioliWorker.postMessage(id, range);
+        });
     }
-
-    // -------------------------------------------------------------------------
-    // Send message back
-    // -------------------------------------------------------------------------
-    if(returnValue != null)
-        self.postMessage({
-            id: id,
-            action: "callback",
-            message: returnValue
-        });
-    else
-        self.postMessage({
-            id: id,
-            action: "callback",
-            message: "ready"
-        });
 }
 
 
@@ -177,7 +104,128 @@ Module["print"] = text => {
 
 
 // =============================================================================
-// Sampling logic
+// Aioli - Worker logic
+// =============================================================================
+
+class AioliWorker
+{
+    // -------------------------------------------------------------------------
+    // Import scripts and make data folder
+    // -------------------------------------------------------------------------
+    static init(config)
+    {
+        DEBUG = config.debug;
+        self.importScripts('aioli.user.js', ...config.imports);
+        FS.mkdir(DIR_DATA, 0o777);
+    }
+
+    // -------------------------------------------------------------------------
+    // Mount file(s) and/or blob(s) to the Worker's file system
+    // Can only mount a folder one at a time, so assign each file a folder
+    // -------------------------------------------------------------------------
+    static mount(config)
+    {
+        // Define folder for current batch of files
+        self.state.n++;
+        var dir = `${DIR_DATA}/${self.state.n}`;
+
+        // Define file system to mount
+        var fs = {}, filesAndBlobs = [];
+        if("files" in config) {
+            fs.files = config.files;
+            filesAndBlobs = filesAndBlobs.concat(fs.files);
+        }
+        if("blobs" in config) {
+            fs.blobs = config.blobs;
+            filesAndBlobs = filesAndBlobs.concat(config.blobs);
+        }
+
+        // Create folder and mount
+        FS.mkdir(dir, 0o777);
+        FS.mount(WORKERFS, fs, dir);
+
+        // Keep track of mounted files
+        for(var f of filesAndBlobs)
+            self.state.files[f.name] = {
+                id: self.state.n,
+                sampling: new AioliSampling(f)
+            }
+
+        return getFilePath(f);
+    }
+
+    // -------------------------------------------------------------------------
+    // Execute WASM functions
+    // -------------------------------------------------------------------------
+    static exec(options)
+    {
+        var config = options[0],
+            args = options.slice(1);
+
+        // Parse config, looking for File objects
+        for(var i in args)
+        {
+            var c = args[i];
+            if(typeof(c) == "object" && "name" in c)
+            {
+                // If not sampling chunk, use path as is
+                if(!("chunk" in config))
+                    args[i] = getFilePath(c);
+                // Otherwise, first need to mount the chunk
+                else {
+                    console.time("mount2");
+                    args[i] = AioliWorker.mount({
+                        blobs: [{
+                            name: `sampled-${config.chunk.start}-${config.chunk.end}-${c.name}`,
+                            data: c.slice(config.chunk.start, config.chunk.end)
+                        }]
+                    });
+                    console.timeEnd("mount2");
+                }
+            }
+        }
+
+        // Launch function
+        if(DEBUG) console.info(`[AioliWorker] Launching`, ...args);
+        if(DEBUG) console.time("[AioliWorker] " + args[0]);
+        Module.callMain(args);
+        if(DEBUG) console.timeEnd("[AioliWorker] " + args[0]);
+
+        // arguments: argc, argv*
+        // fn = Module.cwrap("stk_fqchk", "string", ["number", "array"]);
+        // fn2 = fn(2, ["/data/" + worker.filename, ""]);
+    }
+
+
+    // -------------------------------------------------------------------------
+    // Sample file and return valid chunk range
+    // -------------------------------------------------------------------------
+    static sample(config)
+    {
+        var file = config.file,
+            sampling = getFileInfo(file).sampling,
+            fnValidChunk = CALLBACKS[config.isValidChunk];
+
+        // Return promise
+        return sampling.nextRegion(fnValidChunk);
+    }
+
+    // -------------------------------------------------------------------------
+    // Send message from WebWorker back to app
+    // -------------------------------------------------------------------------
+    static postMessage(id, message="ready", action="callback")
+    {
+        self.postMessage({
+            id: id,
+            action: action,
+            message: message
+        });
+    }
+}
+
+
+// =============================================================================
+// Aioli - Sampling logic
 // =============================================================================
 
 class AioliSampling
@@ -297,5 +345,11 @@ function getFilePath(file)
 // Given File object, return info about it
 function getFileInfo(file)
 {
+    if(typeof(file) == "string")
+        console.error(`[AioliWorker] Expecting File object, not string.`);
+    if(!("name" in file))
+        console.error(`[AioliWorker] Invalid File object; missing "name".`);
+    if(!(file.name in self.state.files))
+        console.error(`[AioliWorker] File specified <${file.name}> needs to be mounted first.`);
     return self.state.files[file.name];
 }

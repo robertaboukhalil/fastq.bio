@@ -20,10 +20,10 @@ var formatNb = nb => Number(nb).toLocaleString();
 
 class FastqBio
 {
-    constructor(file)
+    constructor()
     {
         // Internal state
-        this.file = file;
+        this.file = null;
         this.aioli = null;
         this.paused = false;
         this.visited = [];       // array of visited byte ranges
@@ -45,30 +45,39 @@ class FastqBio
             Atot: {}, Ctot: {}, Gtot: {}, Ttot: {}, Ntot: {}, avgQtot: {}
         };
         this.stats = {};
+    }
 
-        // Validate file name
-        var status = this.validate();
-        if(!status.valid) {
-            alert(status.message);
-            return;
-        }
-
+    init()
+    {
         // Create Aioli (and the WebWorker in which WASM code will run)
         this.aioli = new Aioli({
             imports: DIR_IMPORTS
         });
 
         // Initialize WASM within WebWorker
-        this.aioli.init().then(d => {
-            // Show empty plot and keep re-plotting
-            this.viz();
-            this.plotTimer = setInterval(() => this.viz(), 500);
-            // Mount file
-            this.mount().then(() => {
-                // Start sampling file
-                this.process();
-            });
+        return this.aioli.init();
+    }
+
+    launch(file)
+    {
+        this.file = file;
+
+        // Validate file name
+        var status = this.validate();
+        if(!status.valid) {
+            alert(status.message);
+            return false;
+        }
+
+        // // TODO: Show empty plot and keep re-plotting
+        // this.viz();
+        // this.plotTimer = setInterval(() => this.viz(), 500);
+
+        // Mount file and start sampling
+        this.mount().then(() => {
+            this.process();
         });
+        return true;
     }
 
     // -------------------------------------------------------------------------
@@ -104,17 +113,16 @@ class FastqBio
     // -------------------------------------------------------------------------
     process()
     {
-        console.time("abc");
-        return this.aioli.sample(this.file, "isValidFastqChunk").then((d) => {
-            console.log(d);
-            console.timeEnd("abc");
+        // Find next chunk to sample.
+        // Note: isValidFastqChunk() is defined in aioli.user.js
+        var getNextChunk = this.aioli.sample(this.file, "isValidFastqChunk");
+        return getNextChunk.then((range) => {
+            console.log(range);
+
+            return this.aioli.exec({
+                chunk: range
+            }, "comp", this.file);
         });
-
-
-
-
-
-        return;
 
         // console.time("process()");
 
@@ -187,81 +195,6 @@ class FastqBio
     }
 
     // -------------------------------------------------------------------------
-    // Find next region to sample from
-    // -------------------------------------------------------------------------
-    sample()
-    {
-        this.resamples++;
-        var sampling = {
-            start: 0,
-            end: 0,
-            done: false
-        };
-
-        // If small file, don't sample; use the whole file
-        if(this.file.size <= CHUNK_SIZE * 5)
-            sampling.end = this.file.size;
-        // Otherwise, sample randomly from file (test: startPos = 1068, endPos = 1780)
-        else {
-            // Make first few iterations faster to show the plot for first time
-            var chunk_size = this.plotIterations < 5 ? CHUNK_SIZE / 32 : CHUNK_SIZE;
-            chunk_size = CHUNK_SIZE
-            sampling.start = Math.floor(Math.random() * (this.file.size + 1));
-            sampling.end = Math.min(sampling.start + chunk_size, this.file.size);
-        }
-
-        // Have we already sampled this region?
-        var reSample = false;
-        for(var range of this.visited)
-        {
-            // --------vvvvvvvvvv---
-            //            ssss->
-            if(sampling.start >= range[0] && sampling.start <= range[1])
-            {
-                // --------vvvvvvvvvv---
-                //             ssss
-                if(sampling.end <= range[1]) {
-                    reSample = true;
-                    break;
-                }
-                // --------vvvvvvvvvv---
-                //                ssssss
-                else
-                    sampling.start = range[1];
-            }
-
-            // --------vvvvvvvvvv---
-            //            <-sss
-            if(sampling.end >= range[0] && sampling.end <= range[1])
-            {
-                // --------vvvvvvvvvv---
-                //            sssss
-                if(sampling.start >= range[0]) {
-                    reSample = true;
-                    break;                    
-                }
-                // --------vvvvvvvvvv---
-                //    sssssssssssss
-                else
-                    sampling.end = range[0];
-            }
-
-            // console.log("\tSample", sampling.start, "-->", sampling.end);
-        }
-
-        if(this.resamples > 3) {
-            sampling.done = true;
-        } else if(reSample) {
-            return this.sample();
-        } else {
-            this.resamples = 0;
-        }
-
-        this.visited.push([sampling.start, sampling.end]);
-        return sampling;
-    }
-
-    // -------------------------------------------------------------------------
     // Update visualization
     // -------------------------------------------------------------------------
     viz()
@@ -269,8 +202,7 @@ class FastqBio
         this.updateProgress();
 
         // Plot config
-        var plotInfo = `${formatNb(this.hist.readlength.length)} reads`,
-            plotlyConfig = { modeBarButtonsToRemove: [ 'sendDataToCloud', 'autoScale2d', 'hoverClosestCartesian', 'hoverCompareCartesian', 'lasso2d', 'select2d', 'zoom2d', 'pan2d', 'zoomIn2d', 'zoomOut2d', 'resetScale2d', 'toggleSpikelines' ], displaylogo: false, showTips: true };
+        var plotlyConfig = { modeBarButtonsToRemove: [ 'sendDataToCloud', 'autoScale2d', 'hoverClosestCartesian', 'hoverCompareCartesian', 'lasso2d', 'select2d', 'zoom2d', 'pan2d', 'zoomIn2d', 'zoomOut2d', 'resetScale2d', 'toggleSpikelines' ], displaylogo: false, showTips: true };
 
         // Define data to plot
         var dataToPlot = {
@@ -310,19 +242,15 @@ class FastqBio
 
             // First time plotting:
             if(this.plotIterations == 0)
-            {
                 Plotly.newPlot(plotEl, plot.data, {
-                    title: `${plot.title} - ${plotInfo}`,
+                    title: plot.title,
                     xaxis: { title: plot.titleX },
                     yaxis: { title: plot.titleY, range: plot.rangeY }
                 }, plotlyConfig);
-            }
             // Otherwise, just update the plot
+            // Note: to update title, also need Plotly.relayout(plotEl, { title: newTitle })
             else
-            {
                 Plotly.update(plotEl, { y: plot.data.map(obj => obj.y) });
-                Plotly.relayout(plotEl, { title: `${plot.title} - ${plotInfo}`, "yaxis.range": plot.rangeY });
-            }
         }
         this.plotIterations++;
     }
@@ -397,23 +325,34 @@ class FastqBio
 }
 
 
-
 // =============================================================================
-// UI Handlers
+// Handlers
 // =============================================================================
 
-// Browse for files
-var arrEl = document.querySelectorAll(".btnNewFile");
-for(var i = 0; i < arrEl.length; i++)
-    arrEl[i].addEventListener("click", function(){
-        document.querySelector("#upload").click();
+var app = null,
+    btnUpload = document.querySelector("#btnNewFile"),
+    inputFile = document.querySelector("#upload");
+
+// Initialize fastq.bio on page load
+document.addEventListener("DOMContentLoaded", function()
+{
+    app = new FastqBio();
+    app.init().then(() => {
+        console.log("Aioli initialized.");
     });
+});    
 
-// A file has been selected
-document.querySelector("#upload").addEventListener("change", function(){
-    app = new FastqBio(this.files[0]);
-    $(".containerMain").hide();
-    $(".containerPreview").show();
+// Event: click browse for files
+btnUpload.addEventListener("click", function(){
+    inputFile.click();
+});
+
+// Event: file has been selected
+inputFile.addEventListener("change", function(){
+    if(app.launch(this.files[0])) {
+        $(".containerMain").hide();
+        $(".containerPreview").show();    
+    }
 });
 
 // Handle Drag and Drop
@@ -437,7 +376,7 @@ function dragAndDrop(event)
         else
             f = dataTransfer.files[i];
 
-        launch(f);
+        app.launch(f);
         return;
     }
 }
