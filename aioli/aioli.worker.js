@@ -6,7 +6,8 @@
 // Constants
 // -----------------------------------------------------------------------------
 
-MB = 1024 * 1024;
+KB = 1024;
+MB = KB * KB;
 DEBUG = false;
 DIR_DATA = "/data";
 VALID_ACTIONS = [ "init", "mount", "exec", "sample" ];
@@ -94,6 +95,9 @@ self.onmessage = function(msg)
 // Defaults: don't auto-run WASM program once loaded
 Module = {};
 Module["noInitialRun"] = true;
+// TODO: check effect of setting this
+Module['TOTAL_STACK'] = 50 * 1024 * 2014;
+Module['TOTAL_MEMORY'] = 160 * 1024 * 2014;
 
 // Capture stdout
 Module["print"] = text => {
@@ -238,8 +242,8 @@ class AioliSampling
 
         // TODO: make these configurable
         this.maxRedraws = 10;     // Max number of consecutive redraws
-        this.chunkSize = 1 * MB;  // Chunk size to read from
-        this.chunkSizeValid = 1/512 * MB;  // Chunk size to read to determine whether chunk if valid
+        this.chunkSize = 0.5 * MB;  // Chunk size to read from
+        this.chunkSizeValid = 2 * KB;  // Chunk size to read to determine whether chunk if valid
         this.smallFileFactor = 5; // Define a small file as N * chunkSize
     }
 
@@ -302,7 +306,8 @@ class AioliSampling
 
             if(reSample)
                 break;
-            console.log(`[AioliSampling] - ${sampling.start} --> ${sampling.end}`);
+            if(DEBUG)
+                console.log(`[AioliSampling] - ${sampling.start} --> ${sampling.end}`);
         }
         if(reSample)
             return this.nextRegion();
@@ -310,7 +315,8 @@ class AioliSampling
             this.redraws = 0;
 
         // Narrow down sampling region to valid start byte
-        return new Promise((resolve, reject) => {
+        return new Promise((resolve, reject) =>
+        {
             self.state.reader.readAsBinaryString(this.file.slice(
                 sampling.start,
                 Math.min(sampling.end, sampling.start + this.chunkSizeValid)

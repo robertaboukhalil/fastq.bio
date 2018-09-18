@@ -45,6 +45,8 @@ class FastqBio
             Atot: {}, Ctot: {}, Gtot: {}, Ttot: {}, Ntot: {}, avgQtot: {}
         };
         this.stats = {};
+
+        debug = this;
     }
 
     init()
@@ -54,7 +56,7 @@ class FastqBio
             imports: DIR_IMPORTS
         });
 
-        // Initialize WASM within WebWorker
+        // Initialize WASM within WebWorker (returns a promise; not used here)
         return this.aioli.init();
     }
 
@@ -69,14 +71,17 @@ class FastqBio
             return false;
         }
 
-        // // TODO: Show empty plot and keep re-plotting
-        // this.viz();
-        // this.plotTimer = setInterval(() => this.viz(), 500);
+        // Show (empty) plot
+        this.viz();
 
         // Mount file and start sampling
-        this.mount().then(() => {
+        this.aioli.mount({
+            files: [ this.file ]
+        }).then(() => {
             this.process();
         });
+
+        // Return true => valid FASTQ name
         return true;
     }
 
@@ -99,16 +104,6 @@ class FastqBio
     }
 
     // -------------------------------------------------------------------------
-    // Mount file to WebWorker FS
-    // -------------------------------------------------------------------------
-    mount()
-    {
-        return this.aioli.mount({
-            files: [ this.file ]
-        });
-    }
-
-    // -------------------------------------------------------------------------
     // Process data
     // -------------------------------------------------------------------------
     process()
@@ -116,82 +111,110 @@ class FastqBio
         // Find next chunk to sample.
         // Note: isValidFastqChunk() is defined in aioli.user.js
         var getNextChunk = this.aioli.sample(this.file, "isValidFastqChunk");
-        return getNextChunk.then((range) => {
-            console.log(range);
+        var nextSampling = {};
+        return getNextChunk.then(d =>
+        {
+            nextSampling = d;
 
+            // Check if need to stop sampling
+            if(nextSampling.done || this.paused)
+            {
+                // One last update
+                this.paused = true;
+                clearInterval(this.plotTimer);
+                this.viz();
+                debug = this;
+                return;
+            }
+
+            // Run comp
             return this.aioli.exec({
-                chunk: range
+                chunk: nextSampling
             }, "comp", this.file);
+        }).then(d => {
+            if(d == null)
+                return;
+
+            // Parse comp output
+            this.parseOutputComp(d.data);
+
+            // Run fqchk
+            return this.aioli.exec({
+                chunk: nextSampling
+            }, "fqchk", this.file);
+        }).then((d) => {
+            if(d == null)
+                return;
+
+            // Parse fqchk output
+            this.parseOutputFqchk(d.data);
+            // Update graphs
+            this.viz();
+            this.process();
         });
+    }
 
-        // console.time("process()");
+    // -------------------------------------------------------------------------
+    // Parse outputs
+    // -------------------------------------------------------------------------
 
-        // var sampling = this.sample();
-        // if(sampling.done || this.paused)
-        // {
-        //     // One last update
-        //     this.paused = true;
-        //     clearInterval(this.plotTimer);
-        //     this.viz();
-        //     debug = this;
-        //     return;
-        // };
+    // Parse seqtk output
+    parseOutputComp(dataComp)
+    {
+        if(dataComp.length == 0)
+            return;
 
-        // // Mount file chunk to filesystem
-        // this.chunks++;
-        // var chunkName = `c${this.chunks}-${this.file.name}`;
-        // this.aioli.mount({
-        //     blobs: [{
-        //         name: chunkName,
-        //         data: this.file.slice(sampling.start, sampling.end)
-        //     }]
+        // Parse comp output
+        for(var read of dataComp)
+        {
+            // Ignore zero-length reads output by "seqtk comp". This happens if
+            // we're sampling random bytes from the FASTQ file, and start reading
+            // from the middle of a read ==> seqtk returns readlength = 0. This
+            // shouldn't happen since we provide a validChunk callback.
+            if(read[COL_COMP_READLENGTH] == 0)
+                continue;
 
-        // // Run comp on chunk (stats for GC composition + read length distribution)
-        // }).then(() => {
+            // Save read length
+            this.hist.readlength.push(read[COL_COMP_READLENGTH]);
+            // Save GC composition
+            this.hist.gc.push(read[COL_COMP_G] + read[COL_COMP_C]);
+        }
+    }
 
-        //     var chunk = { filename: chunkName };
-        //     var promiseComp = new Promise((resolve, reject) => {
-        //         this.aioli
-        //             .exec("comp", chunk)
-        //             .then(data => {
-        //                 console.time("parseOutputComp");
-        //                 this.parseOutputComp(data);
-        //                 console.timeEnd("parseOutputComp");
-        //                 resolve();
-        //             });
-        //     }); 
+    parseOutputFqchk(dataFqchk)
+    {
+        if(dataFqchk.length == 0)
+            return;
 
-        //     var promiseFqchk = new Promise((resolve, reject) => {
-        //         this.aioli
-        //             .exec("fqchk", chunk)
-        //             .then(data => {
-        //                 console.time("parseOutputFqchk");
-        //                 this.parseOutputFqchk(data);
-        //                 console.timeEnd("parseOutputFqchk");
-        //                 resolve();
-        //             });
-        //     }); 
+        // Parse header
+        var header = {},
+            data = dataFqchk.slice(3),
+            tmpHeader = dataFqchk.slice(1, 2)[0];
 
-        //     promiseFqchk();
-        //     promiseComp();
+        for(var i in tmpHeader)
+            header[ tmpHeader[i] ] = i;
 
-        //     // Promise.all([ promiseComp, promiseFqchk ]).then((data) =>
-        //     // {
-        //     //     console.timeEnd("process()");
+        // Parse stats
+        for(var row of data)
+        {
+            var pos = row[header["POS"]],
+                nbBases = row[header["#bases"]];
 
-        //     //     // Process next chunk
-        //     //     this.process();
-        //     //     // console.log( this.hist.gc.length )
+            if(!(pos in this.stats_raw.A))
+                for(var k in this.stats_raw)
+                    this.stats_raw[k][pos] = 0;
 
-        //     //     // // Parse current chunk and update stats
-        //     //     // // this.parseOutput(...data);
-        //     //     // this.parseOutputComp(data[0]);
-        //     //     // this.parseOutputFqchk(data[1]);
-        //     //     // console.time("viz")
-        //     //     // this.viz();
-        //     //     // console.timeEnd("viz")
-        //     // });
-        // });
+            // Base composition + avgQ stats
+            for(var base of ["A", "C", "G", "T", "N", "avgQ"]) {
+                var header_name = base != "avgQ" ? `%${base}` : base;
+                this.stats_raw[base][pos] += nbBases * row[header[header_name]]
+                this.stats_raw[`${base}tot`][pos] += nbBases
+            }
+        }
+
+        // Normalize sum so far
+        for(var metric of ["A", "C", "G", "T", "N", "avgQ"])
+            this.stats[metric] = Object.keys(this.stats_raw[metric]).map( k => this.stats_raw[metric][k] / this.stats_raw[`${metric}tot`][k] );
     }
 
     // -------------------------------------------------------------------------
@@ -259,68 +282,11 @@ class FastqBio
     updateProgress()
     {
         $(".spinner, .loadingfile, #btnStop").css("display", this.paused ? "none" : "block");
-        $(".loadingfile").html(`Sampled ${formatNb(this.hist.readlength.length)} reads...&nbsp;`);
+        $(".loadingfile").html(`Sampled ${formatNb(this.hist.readlength.length)} reads&nbsp;`);
         $("#btnStop").off().click(() => {
             $("#btnStop").prop("disabled", true);
             this.paused = true}
         );
-    }
-
-    // Parse seqtk output
-    parseOutputComp(dataComp)
-    {
-        if(dataComp.length == 0)
-            return;
-
-        // Parse comp output
-        for(var read of dataComp.data)
-        {
-            // Ignore zero-length reads output by "seqtk comp". This happens because
-            // we're sampling random bytes from the FASTQ file, and will likely start
-            // reading from the middle of a read ==> seqtk returns readlength = 0
-            if(read[COL_COMP_READLENGTH] == 0)
-                continue;
-
-            // Save read length
-            this.hist.readlength.push(read[COL_COMP_READLENGTH]);
-            // Save GC composition
-            this.hist.gc.push(read[COL_COMP_G] + read[COL_COMP_C]);
-        }
-    }
-
-    parseOutputFqchk(dataFqchk)
-    {
-        if(dataFqchk.length == 0)
-            return;
-        var data = dataFqchk.data.slice(3),
-
-        // Parse header
-        header = {};
-        var tmpHeader = dataFqchk.data.slice(1, 2)[0];
-        for(var i in tmpHeader)
-            header[ tmpHeader[i] ] = i;
-
-        // Parse stats
-        for(var row of data)
-        {
-            var pos = row[header["POS"]],
-                nbBases = row[header["#bases"]];
-
-            if(!(pos in this.stats_raw.A))
-                for(var k in this.stats_raw)
-                    this.stats_raw[k][pos] = 0;
-
-            // Base composition + avgQ stats
-            for(var base of ["A", "C", "G", "T", "N", "avgQ"]) {
-                var header_name = base != "avgQ" ? `%${base}` : base;
-                this.stats_raw[base][pos] += nbBases * row[header[header_name]]
-                this.stats_raw[`${base}tot`][pos] += nbBases
-            }
-        }
-
-        // Normalize sum so far
-        for(var metric of ["A", "C", "G", "T", "N", "avgQ"])
-            this.stats[metric] = Object.keys(this.stats_raw[metric]).map( k => this.stats_raw[metric][k] / this.stats_raw[`${metric}tot`][k] );
     }
 }
 
@@ -338,7 +304,7 @@ document.addEventListener("DOMContentLoaded", function()
 {
     app = new FastqBio();
     app.init().then(() => {
-        console.log("Aioli initialized.");
+        console.info("Aioli initialized.");
     });
 });    
 
