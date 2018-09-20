@@ -51,26 +51,26 @@ self.onmessage = function(msg)
 
     if(action == "init")
     {
-        console.time("init");
+        console.time("AioliInit");
         AioliWorker.init(config);
         AioliWorker.postMessage(id);        
-        console.timeEnd("init");
+        console.timeEnd("AioliInit");
     }
 
     if(action == "mount")
     {
-        console.time("mount");
+        console.time("AioliMount");
         AioliWorker.mount(config);
         AioliWorker.postMessage(id);
-        console.timeEnd("mount");
+        console.timeEnd("AioliMount");
     }
 
     if(action == "exec")
     {
         self.state.running = id;
-        console.time("exec");
+        console.time("AioliExec");
         AioliWorker.exec(config);
-        console.timeEnd("exec");
+        console.timeEnd("AioliExec");
         self.state.running = "";
         AioliWorker.postMessage(id, Papa.parse(self.state.output[id], {
             dynamicTyping: true
@@ -79,9 +79,7 @@ self.onmessage = function(msg)
 
     if(action == "sample")
     {
-        console.time("sample");
         AioliWorker.sample(config).then((range) => {
-            console.timeEnd("sample");
             AioliWorker.postMessage(id, range);
         });
     }
@@ -177,14 +175,12 @@ class AioliWorker
                     args[i] = getFilePath(c);
                 // Otherwise, first need to mount the chunk
                 else {
-                    console.time("mount2");
                     args[i] = AioliWorker.mount({
                         blobs: [{
                             name: `sampled-${config.chunk.start}-${config.chunk.end}-${c.name}`,
                             data: c.slice(config.chunk.start, config.chunk.end)
                         }]
                     });
-                    console.timeEnd("mount2");
                 }
             }
         }
@@ -326,8 +322,9 @@ class AioliSampling
             self.state.reader.onload = () => {
                 var chunk = self.state.reader.result;
                 var byteOffset = 0;
-                while(!isValidChunk(chunk.slice(byteOffset)))
-                    byteOffset++;
+                if(typeof(isValidChunk) == "function")
+                    while(!isValidChunk(chunk.slice(byteOffset)))
+                        byteOffset++;
 
                 // Mark current range as visited
                 this.visited.push([ sampling.start + byteOffset, sampling.end ]);

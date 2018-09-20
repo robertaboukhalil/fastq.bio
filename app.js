@@ -151,6 +151,8 @@ class FastqBio
             // Update graphs
             this.viz();
             this.process();
+        }).catch(e => {
+            console.error(`Error: ${e}. Skipping...`);
         });
     }
 
@@ -281,8 +283,8 @@ class FastqBio
     // Update progress status in UI
     updateProgress()
     {
-        $(".spinner, .loadingfile, #btnStop").css("display", this.paused ? "none" : "block");
-        $(".loadingfile").html(`Sampled ${formatNb(this.hist.readlength.length)} reads&nbsp;`);
+        $(".spinner, #btnStop").css("display", this.paused ? "none" : "block");
+        $(".loadingfile").html(`Sampled ${formatNb(this.hist.readlength.length)} reads`);
         $("#btnStop").off().click(() => {
             $("#btnStop").prop("disabled", true);
             this.paused = true}

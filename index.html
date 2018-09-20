@@ -9,9 +9,11 @@
 
         <link href="assets/bootstrap/bootstrap.min.css" rel="stylesheet">
         <style type="text/css">
-        body { overflow: hidden; }
-        /* CSS Spinner: https://stephanwagner.me/only-css-loading-spinner */
-        @keyframes spinner{to{transform:rotate(360deg)}}.spinner:before{content:'';box-sizing:border-box;position:absolute;width:20px;height:20px;margin-top:-10px;margin-left:-10px;border-radius:50%;border:2px solid #eee;border-top-color:#2663a8;animation:spinner .8s linear infinite}
+            body { overflow: hidden; }
+            .bg-inverse { background-color: #2660918f !important; }
+            .navbar-brand.abs { position: absolute; width: 100%; left: 0; text-align: center; }
+            /* CSS Spinner: https://stephanwagner.me/only-css-loading-spinner */
+            @keyframes spinner{to{transform:rotate(360deg)}}.spinner:before{content:'';box-sizing:border-box;position:absolute;width:20px;height:20px;margin-top:-10px;margin-left:-10px;border-radius:50%;border:2px solid #eee;border-top-color:#2663a8;animation:spinner .8s linear infinite}
         </style>
 
         <script>
@@ -25,29 +27,34 @@
         </script>
     </head>
     <body ondrop="dragAndDrop(event)" ondragover="dragAndDrop(event)" ondragend="dragAndDrop(event)">
-        <!-- Header -->
-        <nav class="navbar navbar-toggleable-md navbar-inverse bg-inverse mb-0">
+        <nav class="navbar navbar-expand-md navbar-dark bg-inverse">
             <a class="navbar-brand" href=".">fastq.bio</a>
-            <div class="spinner" style="display:none"></div>
-            <div style="color:#fff; margin-left:15px;">
+            <div class="spinner" style="display:none"></div>&nbsp;&nbsp;&nbsp;&nbsp;
+            <a id="btnStop" href="#" class="button btn btn-primary btn-sm" role="button" style="display:none">
+                    Stop
+            </a>
+            <div class="navbar-collapse collapse w-100 order-1 order-md-0 dual-collapse2">
                 <ul class="navbar-nav mr-auto">
-                    <li class="nav-item">
-                        <a id="btnStop" href="#" class="button btn btn-primary btn-sm" role="button" style="display:none">
-                            Stop
-                        </a>
-                    </li>
-                    <li class="nav-item">
-                        <div class="btn btn-sm loadingfile" style="display:none">Loading...</div>
-                    </li>
+                    <li class="nav-item"></li>
                 </ul>
             </div>
-            <div style="float:right; width:100%; text-align:right">
-                <a href="http://www.github.com/robertaboukhalil/fastq.bio" target="_blank" style="color:#fff;">Code</a>
+            <div class="mx-auto order-0">
+                <div class="loadingfile navbar-brand mx-auto"></div>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target=".dual-collapse2">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div class="navbar-collapse collapse w-100 order-3 dual-collapse2">
+                <ul class="navbar-nav ml-auto">
+                    <li class="nav-item">
+                            <a class="nav-link" target="_blank" href="https://github.com/robertaboukhalil/fastq.bio">About</a>
+                    </li>
+                </ul>
             </div>
         </nav>
 
         <!-- Container -->
-        <div class="container" style="margin:0; padding:0; width:100%">
+        <div class="" style="width:100vw">
             <div class="containerMain jumbotron" style="text-align:center; height:100vh">
                 <h2>Peek at Your Sequencing Data</h2>
                 <br>
@@ -65,10 +72,10 @@
                 <div class="row">
                     <div class="col-sm-1"></div>
                     <div class="col-sm-5">
-                        <div id="plot-per-base-sequence-content" class="responsive-plot" style="height:46vh;"></div>
+                        <div id="plot-per-base-sequence-content" class="responsive-plot" style="height:46vh; width:40vw"></div>
                     </div>
                     <div class="col-sm-5">
-                        <div id="plot-per-base-sequence-quality" class="responsive-plot" style="height:46vh;"></div>
+                        <div id="plot-per-base-sequence-quality" class="responsive-plot" style="height:46vh; width:40vw"></div>
                     </div>
                     <div class="col-sm-1"></div>
                 </div>
@@ -76,26 +83,22 @@
                 <div class="row">
                     <div class="col-sm-1"></div>
                     <div class="col-sm-5">
-                        <div id="plot-dist-gc-content-per-read" class="responsive-plot" style="height:46vh;"></div>
+                        <div id="plot-dist-gc-content-per-read" class="responsive-plot" style="height:46vh; width:40vw"></div>
                     </div>
                     <div class="col-sm-5">
-                        <div id="plot-dist-seq-length" class="responsive-plot" style="height:46vh;"></div>
+                        <div id="plot-dist-seq-length" class="responsive-plot" style="height:46vh; width:40vw"></div>
                     </div>
                     <div class="col-sm-1"></div>
                 </div>
             </div>
         </div>
 
-        <!-- <div class="spinner" id='spinner'></div>
-        <div class="emscripten" id="status">Downloading...</div>
-        <progress value="0" max="100" id="progress" hidden=1></progress>     -->
-
         <!-- JavaScript Libraries
         ======================================================================== -->
         <!-- Bootstrap / JQuery -->
-        <script type="text/javascript" src="assets/jquery/jquery-3.1.1.slim.min.js"></script>
-        <script type="text/javascript" src="assets/bootstrap/tether_1.4.0_js_tether.min.js"></script>
+        <script type="text/javascript" src="assets/jquery/jquery-3.2.1.slim.min.js"></script>
         <script type="text/javascript" src="assets/bootstrap/bootstrap.min.js"></script>
+        <script type="text/javascript" src="assets/bootstrap/popper.min.js"></script>
         <!-- Plotly -->
         <script type="text/javascript" src="assets/plotly/plotly-latest.min.js"></script>
         <!-- Fastq.bio -->
