@@ -9,7 +9,8 @@
 KB = 1024;
 MB = KB * KB;
 DEBUG = false;
-DIR_DATA = "/data";
+DIR_DATA = "/data";     // in virtual file system
+DIR_WASM = "../wasm";   // in real file system
 VALID_ACTIONS = [ "init", "mount", "exec", "sample" ];
 
 
@@ -92,13 +93,14 @@ self.onmessage = function(msg)
 
 // Defaults: don't auto-run WASM program once loaded
 Module = {};
-Module["noInitialRun"] = true;
-// TODO: check effect of setting this
-Module['TOTAL_STACK'] = 50 * 1024 * 2014;
-Module['TOTAL_MEMORY'] = 160 * 1024 * 2014;
+Module.noInitialRun = true;
+Module.locateFile = url => `${DIR_WASM}/${url}`;
+// // TODO: check effect of setting this
+// Module.TOTAL_STACK = 50 * 1024 * 2014;
+// Module.TOTAL_MEMORY = 160 * 1024 * 2014;
 
 // Capture stdout
-Module["print"] = text => {
+Module.print = text => {
     if(!(self.state.running in self.state.output))
         self.state.output[self.state.running] = "";
     self.state.output[self.state.running] += text + "\n";
@@ -117,7 +119,12 @@ class AioliWorker
     static init(config)
     {
         DEBUG = config.debug;
-        self.importScripts('aioli.user.js', ...config.imports);
+
+        self.importScripts(
+            'aioli.user.js',
+            ...config.assets,
+            ...config.imports.map(Module.locateFile)
+        );
         FS.mkdir(DIR_DATA, 0o777);
     }
 

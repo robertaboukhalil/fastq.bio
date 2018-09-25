@@ -1,7 +1,7 @@
 var debug = {};
 var app = null;
 
-DIR_IMPORTS = [ "seqtk/seqtk.js", "assets/papaparse.min.js" ];
+DIR_IMPORTS = [ "seqtk.js" ];
 
 CHUNK_SIZE = 1 * 1024 * 1024;  // in bytes
 
