@@ -283,8 +283,9 @@ class FastqBio
     // Update progress status in UI
     updateProgress()
     {
+        var action = this.file.name.match(/.gz$/g) ? "Parsed" : "Sampled";
         $(".spinner, #btnStop").css("display", this.paused ? "none" : "block");
-        $(".loadingfile").html(`Sampled ${formatNb(this.hist.readlength.length)} reads`);
+        $(".loadingfile").html(`${action} ${formatNb(this.hist.readlength.length)} reads`);
         $("#btnStop").off().click(() => {
             $("#btnStop").prop("disabled", true);
             this.paused = true}

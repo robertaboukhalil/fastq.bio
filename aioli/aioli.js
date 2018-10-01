@@ -26,7 +26,7 @@ class Aioli
         // Track promises (indexed by this.n)
         this.resolves = {};
         this.rejects = {};
-        this.imports = [...config.imports];
+        this.imports = config.imports;
         this.assets = ["assets/papaparse.min.js"];
 
         // Validate

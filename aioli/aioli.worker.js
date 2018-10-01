@@ -12,7 +12,7 @@ DEBUG = false;
 DIR_DATA = "/data";     // in virtual file system
 DIR_WASM = "../wasm";   // in real file system
 VALID_ACTIONS = [ "init", "mount", "exec", "sample" ];
-
+REGEX_GZIP = /.gz$/g;
 
 // -----------------------------------------------------------------------------
 // State
@@ -80,8 +80,10 @@ self.onmessage = function(msg)
 
     if(action == "sample")
     {
-        AioliWorker.sample(config).then((range) => {
+        AioliWorker.sample(config).then(range => {
             AioliWorker.postMessage(id, range);
+        }).catch(e => {
+            console.error(`[AioliWorkerSample]: ${e}`);
         });
     }
 }
@@ -242,6 +244,7 @@ class AioliSampling
         this.file = file;         // File or Blob to sample from
         this.visited = [];        // List of ranges already visited
         this.redraws = 0;         // Number of consecutive times we redraw random positions to sample
+        this.stopAtNext = false;  // If true, will sample this time, but stop the next iteration (used for small gzips)
 
         // TODO: make these configurable
         this.maxRedraws = 10;     // Max number of consecutive redraws
@@ -257,7 +260,9 @@ class AioliSampling
 
     nextRegion(isValidChunk)
     {
-        this.redraws++;
+        // Assume need to sample (unless .gz file)
+        var doSample = true;
+        // Will contain the sampling parameters to send back
         var sampling = {
             start: 0,
             end: 0,
@@ -265,19 +270,32 @@ class AioliSampling
         };
 
         // If too many consecutive redraws, stop sampling
-        if(this.redraws > this.maxRedraws) {
+        // Also use redraws to sample further into a gzip file
+        this.redraws++;
+        if(this.redraws > this.maxRedraws || this.stopAtNext) {
             sampling.done = true;
-            return sampling;
+            return new Promise((resolve, reject) => resolve(sampling));
         }
 
+        // Special Cases
+        // If gzip file, can't sample
+        if(this.file.name.match(REGEX_GZIP)) {
+            doSample = false;
+            sampling.end = this.chunkSize * this.redraws;
+            if(sampling.end > this.file.size)
+            this.stopAtNext = true;
         // If small file, don't sample; use the whole file
-        if(this.file.size <= this.chunkSize * this.smallFileFactor)
+        } else if(this.file.size <= this.chunkSize * this.smallFileFactor) {
             sampling.end = this.file.size;
         // Otherwise, sample randomly from file (test: startPos = 1068, endPos = 1780)
-        else {
+        } else {
             sampling.start = Math.floor(Math.random() * (this.file.size + 1));
             sampling.end = Math.min(sampling.start + this.chunkSize, this.file.size);
         }
+        console.log(sampling)
+        // If shouldn't sample, return resolved promise
+        if(!doSample)
+            return new Promise((resolve, reject) => resolve(sampling));
 
         // Have we already sampled this region?
         var reSample = false;
