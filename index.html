@@ -8,6 +8,8 @@
         <title>fastq.bio</title>
 
         <link href="assets/bootstrap/bootstrap.min.css" rel="stylesheet">
+        <link href="https://maxcdn.bootstrapcdn.com/font-awesome/4.7.0/css/font-awesome.min.css" rel="stylesheet">
+
         <style type="text/css">
             body { overflow: hidden; }
             .bg-inverse { background-color: #2660918f !important; }
@@ -29,17 +31,17 @@
     <body ondrop="dragAndDrop(event)" ondragover="dragAndDrop(event)" ondragend="dragAndDrop(event)">
         <nav class="navbar navbar-expand-md navbar-dark bg-inverse">
             <a class="navbar-brand" href=".">fastq.bio</a>
-            <div class="spinner" style="display:none"></div>&nbsp;&nbsp;&nbsp;&nbsp;
-            <a id="btnStop" href="#" class="button btn btn-primary btn-sm" role="button" style="display:none">
-                    Stop
-            </a>
             <div class="navbar-collapse collapse w-100 order-1 order-md-0 dual-collapse2">
                 <ul class="navbar-nav mr-auto">
                     <li class="nav-item"></li>
                 </ul>
             </div>
             <div class="mx-auto order-0">
-                <div class="loadingfile navbar-brand mx-auto"></div>
+                <div style="float:left" class="loadingfile navbar-brand mx-auto">
+                    <a id="btnPause" href="#" class="button btn btn-primary btn-sm" role="button" style="display:none"><span class="fa fa-pause"></span></a>
+                    &nbsp;
+                    <span></span>   
+                </div>
                 <button class="navbar-toggler" type="button" data-toggle="collapse" data-target=".dual-collapse2">
                     <span class="navbar-toggler-icon"></span>
                 </button>
@@ -47,7 +49,7 @@
             <div class="navbar-collapse collapse w-100 order-3 dual-collapse2">
                 <ul class="navbar-nav ml-auto">
                     <li class="nav-item">
-                            <a class="nav-link" target="_blank" href="https://github.com/robertaboukhalil/fastq.bio">About</a>
+                        <a class="nav-link" target="_blank" href="https://github.com/robertaboukhalil/fastq.bio">About</a>
                     </li>
                 </ul>
             </div>
@@ -69,6 +71,10 @@
                 <p class="lead" style="color:#999"><a id="btnSample" href="#">Use Example FASTQ (NA12878)</a></p>
             </div>
             <div class="containerPreview" style="display:none; height:100vh">
+                <div class="progress" style="height: 10px; border-radius:0">
+                    <div class="progress-bar progress-bar-animated progress-bar-striped" role="progressbar" style="width: 100%;" aria-valuenow="100" aria-valuemin="0" aria-valuemax="100"></div>
+                </div>
+
                 <div class="row">
                     <div class="col-sm-1"></div>
                     <div class="col-sm-5">

@@ -26,6 +26,7 @@ class FastqBio
         this.file = null;
         this.aioli = null;
         this.paused = false;
+        this.done = false;
         this.visited = [];       // array of visited byte ranges
         this.resamples = 0;      // number of times resampled after couldn't find match
         this.chunks = 0;
@@ -119,9 +120,13 @@ class FastqBio
             // Check if need to stop sampling
             if(nextSampling.done || this.paused)
             {
+                // Only clear timer if done with file
+                if(nextSampling.done) {
+                    this.done = true;
+                    this.paused = true;
+                    clearInterval(this.plotTimer);
+                }
                 // One last update
-                this.paused = true;
-                clearInterval(this.plotTimer);
                 this.viz();
                 debug = this;
                 return;
@@ -283,13 +288,31 @@ class FastqBio
     // Update progress status in UI
     updateProgress()
     {
+        // Show number of reads processed
         var action = this.file.name.match(/.gz$/g) ? "Parsed" : "Sampled";
-        $(".spinner, #btnStop").css("display", this.paused ? "none" : "block");
-        $(".loadingfile").html(`${action} ${formatNb(this.hist.readlength.length)} reads`);
-        $("#btnStop").off().click(() => {
-            $("#btnStop").prop("disabled", true);
-            this.paused = true}
-        );
+        $(".loadingfile > span").html(`${action} ${formatNb(this.hist.readlength.length)} reads`);
+        // Update UI
+        this.updateProgressUI();
+
+        // Setup play/pause button on click
+        $("#btnPause").off().click(() =>
+        {
+            // Toggle paused status
+            this.paused = !this.paused;
+            // Update button icon
+            $("#btnPause").html(`<span class="fa fa-${ this.paused ? "play" : "pause" }"></span>`);
+            // Update UI
+            this.updateProgressUI();
+
+            if(!this.paused)
+                this.process();
+        });
+    }
+    updateProgressUI()
+    {
+        // Show/hide pause button + progress bar
+        $("#btnPause").css("display", this.done ? "none" : "inline");
+        $(".progress").css("display", this.paused ? "none" : "");
     }
 }
 
@@ -300,6 +323,7 @@ class FastqBio
 
 var app = null,
     btnUpload = document.querySelector("#btnNewFile"),
+    btnSample = document.querySelector("#btnSample"),
     inputFile = document.querySelector("#upload");
 
 // Initialize app with given file
@@ -346,6 +370,13 @@ document.addEventListener("DOMContentLoaded", function()
     }
 });    
 
+// Event: click use sample FASTQ
+btnSample.addEventListener("click", function(){
+    var url = new URL(window.location);
+    url.searchParams.set("url", "data/dx.fastq");
+    window.location.search = url.search;    
+});
+
 // Event: click browse for files
 btnUpload.addEventListener("click", function(){
     inputFile.click();
@@ -355,6 +386,7 @@ btnUpload.addEventListener("click", function(){
 inputFile.addEventListener("change", function(){
     initApp(this.files[0]);
 });
+
 
 // Handle Drag and Drop
 function dragAndDrop(event)
