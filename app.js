@@ -302,13 +302,48 @@ var app = null,
     btnUpload = document.querySelector("#btnNewFile"),
     inputFile = document.querySelector("#upload");
 
+// Initialize app with given file
+function initApp(file)
+{
+    if(app.launch(file)) {
+        $(".containerMain").hide();
+        $(".containerPreview").show();    
+    }
+}
+
 // Initialize fastq.bio on page load
 document.addEventListener("DOMContentLoaded", function()
 {
+    // Setup app
     app = new FastqBio();
     app.init().then(() => {
         console.info("Aioli initialized.");
     });
+
+    // Support URLs
+    var fileURL = new URL(window.location).searchParams.get('url');
+    if(fileURL != null && fileURL != '')
+    {
+        setTimeout(function()
+        {
+            var request = new XMLHttpRequest();
+            request.open("GET", fileURL, true);
+            request.setRequestHeader("Range", "bytes=0-10000000");
+            request.responseType = "blob";
+            request.onload = function()
+            {
+                console.log("[FastqBioURL] Loaded file of size " + Math.round(request.response.size/1024/1024*100)/100 + "MB.")
+                // Convert Blob to File
+                var blob = request.response;
+                blob.lastModifiedDate = new Date();
+                // Launch
+                initApp(new File([blob], fileURL.split("/").reverse()[0]));
+            };
+            request.send();
+    
+        }, 150);
+    
+    }
 });    
 
 // Event: click browse for files
@@ -318,10 +353,7 @@ btnUpload.addEventListener("click", function(){
 
 // Event: file has been selected
 inputFile.addEventListener("change", function(){
-    if(app.launch(this.files[0])) {
-        $(".containerMain").hide();
-        $(".containerPreview").show();    
-    }
+    initApp(this.files[0]);
 });
 
 // Handle Drag and Drop
