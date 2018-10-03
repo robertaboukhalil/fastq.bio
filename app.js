@@ -331,7 +331,8 @@ function initApp(file)
 {
     if(app.launch(file)) {
         $(".containerMain").hide();
-        $(".containerPreview").show();    
+        $(".containerPreview").show();
+        $(".spinner").hide();
     }
 }
 
@@ -348,6 +349,7 @@ document.addEventListener("DOMContentLoaded", function()
     var fileURL = new URL(window.location).searchParams.get('url');
     if(fileURL != null && fileURL != '')
     {
+        $(".spinner").show();
         setTimeout(function()
         {
             var request = new XMLHttpRequest();
@@ -366,7 +368,6 @@ document.addEventListener("DOMContentLoaded", function()
             request.send();
     
         }, 150);
-    
     }
 });    
 
@@ -386,7 +387,6 @@ btnUpload.addEventListener("click", function(){
 inputFile.addEventListener("change", function(){
     initApp(this.files[0]);
 });
-
 
 // Handle Drag and Drop
 function dragAndDrop(event)

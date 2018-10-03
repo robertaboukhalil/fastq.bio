@@ -292,7 +292,6 @@ class AioliSampling
             sampling.start = Math.floor(Math.random() * (this.file.size + 1));
             sampling.end = Math.min(sampling.start + this.chunkSize, this.file.size);
         }
-        console.log(sampling)
         // If shouldn't sample, return resolved promise
         if(!doSample)
             return new Promise((resolve, reject) => resolve(sampling));
