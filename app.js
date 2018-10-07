@@ -134,8 +134,9 @@ class FastqBio
 
             // Run comp
             return this.aioli.exec({
-                chunk: nextSampling
-            }, "comp", this.file);
+                chunk: nextSampling,
+                args: ["comp", this.file],
+            });
         }).then(d => {
             if(d == null)
                 return;
@@ -145,8 +146,9 @@ class FastqBio
 
             // Run fqchk
             return this.aioli.exec({
-                chunk: nextSampling
-            }, "fqchk", this.file);
+                chunk: nextSampling,
+                args: ["fqchk", this.file]
+            });
         }).then((d) => {
             if(d == null)
                 return;

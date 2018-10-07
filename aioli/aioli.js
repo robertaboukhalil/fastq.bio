@@ -62,9 +62,9 @@ class Aioli
     }
 
     // Launch WASM code
-    exec()
+    exec(config)
     {
-        return this.workerSend("exec", [...arguments]);
+        return this.workerSend("exec", config);
     }
 
     // Sample from file (isValidChunk returns true if given chunk if valid)

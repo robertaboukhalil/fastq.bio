@@ -73,9 +73,11 @@ self.onmessage = function(msg)
         AioliWorker.exec(config);
         console.timeEnd("AioliExec");
         self.state.running = "";
-        AioliWorker.postMessage(id, Papa.parse(self.state.output[id], {
-            dynamicTyping: true
-        }));
+        // Send back output
+        if(self.state.output[id] != null)
+            AioliWorker.postMessage(id, Papa.parse(self.state.output[id], {
+                dynamicTyping: true
+            }));
     }
 
     if(action == "sample")
@@ -107,6 +109,10 @@ Module.print = text => {
         self.state.output[self.state.running] = "";
     self.state.output[self.state.running] += text + "\n";
 };
+
+Module.printErr = text => {
+    console.warn(text);
+}
 
 
 // =============================================================================
@@ -168,41 +174,54 @@ class AioliWorker
     // -------------------------------------------------------------------------
     // Execute WASM functions
     // -------------------------------------------------------------------------
-    static exec(options)
+    
+    // Recursively parse command-line arguments, and replace File objects with mounted paths
+    static execParse(args, chunk)
     {
-        var config = options[0],
-            args = options.slice(1);
-
-        // Parse config, looking for File objects
         for(var i in args)
         {
             var c = args[i];
-            if(typeof(c) == "object" && "name" in c)
+
+            // Is array?
+            if(c.constructor === Array)
             {
+                args[i] = AioliWorker.execParse(c);
+
+            // Is File object?
+            } else if(typeof(c) == "object" && "name" in c) {
                 // If not sampling chunk, use path as is
-                if(!("chunk" in config))
+                if(chunk == null)
                     args[i] = getFilePath(c);
                 // Otherwise, first need to mount the chunk
                 else {
                     args[i] = AioliWorker.mount({
                         blobs: [{
-                            name: `sampled-${config.chunk.start}-${config.chunk.end}-${c.name}`,
-                            data: c.slice(config.chunk.start, config.chunk.end)
+                            name: `sampled-${chunk.start}-${chunk.end}-${c.name}`,
+                            data: c.slice(chunk.start, chunk.end)
                         }]
                     });
                 }
             }
         }
+        return args;
+    }
+
+    // Execute command
+    static exec(config)
+    {
+        // Parse command-line args and convert File objects to paths
+        config.args = AioliWorker.execParse(config.args, config.chunk);
 
         // Launch function
-        if(DEBUG) console.info(`[AioliWorker] Launching`, ...args);
-        if(DEBUG) console.time("[AioliWorker] " + args[0]);
-        Module.callMain(args);
-        if(DEBUG) console.timeEnd("[AioliWorker] " + args[0]);
+        if(DEBUG) console.time(`[AioliWorker] ${config.fn ? config.fn : "main"}()`);
 
-        // arguments: argc, argv*
-        // fn = Module.cwrap("stk_fqchk", "string", ["number", "array"]);
-        // fn2 = fn(2, ["/data/" + worker.filename, ""]);
+        // Either call main() or custom function
+        if(config.fn == null)
+            Module.callMain(config.args);
+        else if(config.argTypes != null && config.returnType != null)
+            Module.ccall(config.fn, config.returnType, config.argTypes, config.args);
+
+        if(DEBUG) console.timeEnd(`[AioliWorker] ${config.fn ? config.fn : "main"}()`);
     }
 
 
