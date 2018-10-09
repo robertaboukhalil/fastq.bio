@@ -1,5 +1,8 @@
 
 all:
+	# Install dependencies
+	npm install .
+	# Compile seqtk to WASM
 	emcc seqtk/seqtk.c \
 		-s USE_ZLIB=1 \
 		-s FORCE_FILESYSTEM=1 \
