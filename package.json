@@ -1,0 +1,14 @@
+{
+  "name": "fastq.bio",
+  "version": "2.0.0",
+  "description": "An interactive web tool for quality control of DNA sequencing data",
+  "dependencies": {
+    "@robertaboukhalil/aioli": "^0.1.4"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/robertaboukhalil/fastq.bio"
+  },
+  "author": "Robert Aboukhalil",
+  "license": "MIT"
+}
