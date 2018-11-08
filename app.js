@@ -1,17 +1,23 @@
 var debug = {};
 var app = null;
-
-DIR_IMPORTS = [ "seqtk.js" ];
-
-CHUNK_SIZE = 1 * 1024 * 1024;  // in bytes
-
-COL_COMP_READLENGTH = 1;
-COL_COMP_A = 2;
-COL_COMP_C = 3;
-COL_COMP_G = 4;
-COL_COMP_T = 5;
-
+var KB = 1024, MB = KB * KB;
 var formatNb = nb => Number(nb).toLocaleString();
+
+var DIR_IMPORTS = [ "seqtk.js" ];
+
+// Seqtk output columns (original seqtk version)
+var COL_FQCHK_NUM_HEADER_LINES = 2,
+    COL_COMP_READLENGTH = 1,
+    COL_COMP_C = 3,
+    COL_COMP_G = 4;
+
+// // Seqtk output columns (trimmed version)
+// var COL_FQCHK_NUM_HEADER_LINES = 1,
+//     COL_COMP_READLENGTH = 0,
+//     COL_COMP_C = 1,
+//     COL_COMP_G = 2;
+
+var TIMER_START = 0, TIMER_END = 0;
 
 
 // =============================================================================
@@ -33,7 +39,6 @@ class FastqBio
 
         // Plotting
         this.plotIterations = 0; // number of times updated the plots
-        this.plotTimer = null;
 
         // Histograms
         this.hist = {
@@ -79,6 +84,7 @@ class FastqBio
         this.aioli.mount({
             files: [ this.file ]
         }).then(() => {
+            TIMER_START = window.performance.now();
             this.process();
         });
 
@@ -111,20 +117,25 @@ class FastqBio
     {
         // Find next chunk to sample.
         // Note: isValidFastqChunk() is defined in aioli.user.js
-        var getNextChunk = this.aioli.sample(this.file, "isValidFastqChunk");
         var nextSampling = {};
-        return getNextChunk.then(d =>
-        {
+        return this.aioli.sample(
+            this.file,
+            "isValidFastqChunk"
+        ).then(d => {
             nextSampling = d;
 
             // Check if need to stop sampling
             if(nextSampling.done || this.paused)
             {
-                // Only clear timer if done with file
+                TIMER_END = window.performance.now();
+                console.log("Runtime:", TIMER_END - TIMER_START);
+                console.log("Reads processed:", this.hist.readlength.length);
+                console.log("Reads/s:", this.hist.readlength.length / ((TIMER_END - TIMER_START) / 1000));
+
+                // If done sampling, also mark as paused
                 if(nextSampling.done) {
                     this.done = true;
                     this.paused = true;
-                    clearInterval(this.plotTimer);
                 }
                 // One last update
                 this.viz();
@@ -132,32 +143,48 @@ class FastqBio
                 return;
             }
 
+            // // Launch optimized "fqchk" command
+            // return this.aioli.exec({
+            //     chunk: nextSampling,
+            //     args: ["fqchk", this.file],
+            // }).then(data => {
+            //     var output = data.data,
+            //         outputComp = output.filter(row => row.length == 3),
+            //         outputFqchk = output.filter(row => row.length > 3);
+            //     this.parseOutputComp(outputComp);
+            //     this.parseOutputFqchk(outputFqchk);
+            //     // Update graphs & process next chunk
+            //     this.viz();
+            //     this.process();
+            // });
+
             // Run comp
             return this.aioli.exec({
                 chunk: nextSampling,
                 args: ["comp", this.file],
+            }).then(d => {
+                if(d == null)
+                    return;
+
+                // Parse comp output
+                this.parseOutputComp(d.data);
+
+                // Run fqchk
+                return this.aioli.exec({
+                    chunk: nextSampling,
+                    args: ["fqchk", this.file]
+                });
+            }).then((d) => {
+                if(d == null)
+                    return;
+
+                // Parse fqchk output
+                this.parseOutputFqchk(d.data);
+                // Update graphs
+                this.viz();
+                this.process();
             });
-        }).then(d => {
-            if(d == null)
-                return;
 
-            // Parse comp output
-            this.parseOutputComp(d.data);
-
-            // Run fqchk
-            return this.aioli.exec({
-                chunk: nextSampling,
-                args: ["fqchk", this.file]
-            });
-        }).then((d) => {
-            if(d == null)
-                return;
-
-            // Parse fqchk output
-            this.parseOutputFqchk(d.data);
-            // Update graphs
-            this.viz();
-            this.process();
         }).catch(e => {
             console.error(`Error: ${e}. Skipping...`);
         });
@@ -170,9 +197,6 @@ class FastqBio
     // Parse seqtk output
     parseOutputComp(dataComp)
     {
-        if(dataComp.length == 0)
-            return;
-
         // Parse comp output
         for(var read of dataComp)
         {
@@ -186,7 +210,7 @@ class FastqBio
             // Save read length
             this.hist.readlength.push(read[COL_COMP_READLENGTH]);
             // Save GC composition
-            this.hist.gc.push(read[COL_COMP_G] + read[COL_COMP_C]);
+            this.hist.gc.push(Math.round((read[COL_COMP_G] + read[COL_COMP_C]) / read[COL_COMP_READLENGTH] * 1000) / 1000);
         }
     }
 
@@ -197,8 +221,8 @@ class FastqBio
 
         // Parse header
         var header = {},
-            data = dataFqchk.slice(3),
-            tmpHeader = dataFqchk.slice(1, 2)[0];
+            data = dataFqchk.slice(COL_FQCHK_NUM_HEADER_LINES + 1),
+            tmpHeader = dataFqchk.slice(COL_FQCHK_NUM_HEADER_LINES - 1, COL_FQCHK_NUM_HEADER_LINES)[0];
 
         for(var i in tmpHeader)
             header[ tmpHeader[i] ] = i;
@@ -253,14 +277,22 @@ class FastqBio
                 rangeY: [0, 50] // this.stats.avgQ == null ? null : Math.max(...this.stats.avgQ.filter(n => Number.isFinite(n))) * 1.1
             },
             "plot-dist-gc-content-per-read": {
-                data: [{ x: this.hist.gc, type: "histogram" }],
+                data: [{
+                    x: this.hist.gc,
+                    type: "histogram",
+                    xbins: {
+                        start: 0,
+                        end: 1, 
+                        size: 0.05,
+                    }
+                }],
                 title: "Average GC Content per Read",
                 titleX: "GC Content",
                 titleY: "Counts",
                 rangeY: undefined
             },
             "plot-dist-seq-length": {
-                data: [{ x: this.hist.readlength, type: "histogram" }],
+                data: [{ x: this.hist.readlength, type: "histogram"} ],
                 title: "Read Length Distribution",
                 titleX: "Read Length",
                 titleY: "Counts",
