@@ -1,7 +1,9 @@
 # fastq.bio
-An interactive web tool that generates quality metrics from DNA sequencing data.
+*An interactive web tool that generates quality metrics from DNA sequencing data.*
 
-This version runs the WebAssembly code in the browser. See [this repo](https://github.com/robertaboukhalil/fastq.bio-serverless) for the version of fastq.bio that runs the WebAssembly in a serverless fashion.
+**This version of fastq.bio runs the WebAssembly code in the browser.**
+
+See [this repo](https://github.com/robertaboukhalil/fastq.bio-serverless) for the version of fastq.bio that runs the WebAssembly in a serverless fashion.
 
 ![Screenshot](https://res.cloudinary.com/indysigner/image/fetch/f_auto,q_auto/w_1600/https://cloud.netlifyusercontent.com/assets/344dbf88-fdf9-42bb-adb4-46f01eedd629/06e27be8-1fef-468b-9d23-40ae53e0a354/webassembly-speed-web-app1.png)
 
