@@ -377,38 +377,38 @@ document.addEventListener("DOMContentLoaded", function()
     app = new FastqBio();
     app.init().then(() => {
         console.info("Aioli initialized.");
-    });
 
-    // Support URLs
-    var fileURL = new URL(window.location).searchParams.get('url');
-    if(fileURL != null && fileURL != '')
-    {
-        $(".spinner").show();
-        setTimeout(function()
+        // Support URLs
+        var fileURL = new URL(window.location).searchParams.get('url');
+        if(fileURL != null && fileURL != '')
         {
-            var request = new XMLHttpRequest();
-            request.open("GET", fileURL, true);
-            request.setRequestHeader("Range", "bytes=0-10000000");
-            request.responseType = "blob";
-            request.onload = function()
+            $(".spinner").show();
+            setTimeout(function()
             {
-                console.log("[FastqBioURL] Loaded file of size " + Math.round(request.response.size/1024/1024*100)/100 + "MB.")
-                // Convert Blob to File
-                var blob = request.response;
-                blob.lastModifiedDate = new Date();
-                // Launch
-                initApp(new File([blob], fileURL.split("/").reverse()[0]));
-            };
-            request.send();
-    
-        }, 150);
-    }
+                var request = new XMLHttpRequest();
+                request.open("GET", fileURL, true);
+                request.setRequestHeader("Range", "bytes=0-10000000");
+                request.responseType = "blob";
+                request.onload = function()
+                {
+                    console.log("[FastqBioURL] Loaded file of size " + Math.round(request.response.size/1024/1024*100)/100 + "MB.")
+                    // Convert Blob to File
+                    var blob = request.response;
+                    blob.lastModifiedDate = new Date();
+                    // Launch
+                    initApp(new File([blob], fileURL.split("/").reverse()[0]));
+                };
+                request.send();
+        
+            }, 150);
+        }
+    });
 });    
 
 // Event: click use sample FASTQ
 btnSample.addEventListener("click", function(){
     var url = new URL(window.location);
-    url.searchParams.set("url", "data/dx.fastq");
+    url.searchParams.set("url", "data/NA12878.fastq.gz");
     window.location.search = url.search;    
 });
 
