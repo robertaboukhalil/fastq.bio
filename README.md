@@ -17,6 +17,29 @@ See [this repo](https://github.com/robertaboukhalil/fastq.bio-serverless) for th
 - Sample random chunks of data from the file and run `seqtk` on that chunk inside the WebWorker (to preserve the app's responsiveness)
 - Update the plot with results
 
+## Docker
+
+If you want to quickly run (or demo) the tool with Docker, you can build the container:
+
+```bash
+$ docker build -t fastq.bio .
+```
+
+And then run the container, exposing port 80 on your host:
+
+```bash
+$ docker run --name fastq.bio -d --rm -p 80:80 -it fastq.bio
+```
+
+You should then be able to open your browser to `127.0.0.1`, and select the sample
+fastq data to preview the application. You can also select a file from your host.
+
+When you are done, stop the container:
+
+```bash
+$ docker stop fastq.bio
+```
+
 ## Why WebAssembly
 
 In short, WebAssembly allows us to avoid rewriting existing tools like `seqtk` to JavaScript, and gives us a significant speedup over running it in JavaScript:
