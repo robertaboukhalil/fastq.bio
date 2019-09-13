@@ -408,7 +408,7 @@ document.addEventListener("DOMContentLoaded", function()
 // Event: click use sample FASTQ
 btnSample.addEventListener("click", function(){
     var url = new URL(window.location);
-    url.searchParams.set("url", "data/NA12878.fastq.gz");
+    url.searchParams.set("url", "data/NA12878_U0a_CGATGT_L001_R1_005.fastq");
     window.location.search = url.search;    
 });
 
