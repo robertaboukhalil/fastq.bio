@@ -102,9 +102,16 @@ $: FILES_PAIRED = getFastqPairs(FILES);
 // Utility functions
 // -----------------------------------------------------------------------------
 
+function deleteFile(file)
+{
+	FILES = Array.from(FILES).filter(f => f.name != file.name);
+}
+
+
 function getFastqPairs(filelist)
 {
 	let result = [];
+	// Convert from FileList to array
 	let files = Array.from(filelist);
 	// Natural sort (https://stackoverflow.com/a/38641281)
 	files.sort((a, b) => a.name.localeCompare(b.name, undefined, {
@@ -259,8 +266,17 @@ code {
 					file
 				</p>
 				<hr />
-				{#each FILES as file}
-					<p>{file.name}</p>
+				{#each FILES_PAIRED as filePair}
+					<div class="card mb-2">
+						<div class="card-body">
+							{#each filePair as file}
+								<button on:click={() => deleteFile(file)} type="button" class="btn btn-link p-0" style="vertical-align: baseline">
+									<strong>X</strong>
+								</button>
+								{file.name}<br />
+							{/each}
+						</div>
+					</div>
 				{/each}
 			</div>
 
@@ -317,7 +333,12 @@ code {
 				<hr />
 
 				{#each REPORTS as report}
-					<a target="_blank" href={report.url}>{report.name}</a>
+					<div class="card mb-2">
+						<div class="card-body">
+							<p>{report.name}</p>
+							<a target="_blank" href={report.url} class="btn btn-sm btn-primary">Open Report</a>
+						</div>
+					</div>
 				{/each}
 			</div>
 		</div>
