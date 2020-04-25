@@ -16,7 +16,7 @@
     "svelte": "^3.0.0"
   },
   "dependencies": {
-    "@biowasm/aioli": "^1.1.1",
+    "@biowasm/aioli": "^1.1.3",
     "sirv-cli": "^0.4.4"
   }
 }
