@@ -16,6 +16,10 @@ let Reports = [];						// Reports output by fastp
 let Fastp = new Aioli("fastp/0.20.1");	// Fastp command line tool (compiled to WebAssembly)
 let Params = [];						// Fastp CLI parameters - Array
 let ParamsCLI = "";						// Fastp CLI parameters - String
+let UI = {								// General UI Options
+	busy: true,
+	showExtraParams: false
+}
 let Options = {							// Fastp UI Options
 	nbReads: 5000,
 	minMapQ: 15,
@@ -55,7 +59,7 @@ $: ParamsCLI = Object.entries(Params)
 
 async function runAnalysis()
 {
-	showAnalysisBtn = false;
+	UI.busy = true;
 
 	// Process file pairs
 	for(let files of FilesPaired)
@@ -80,7 +84,7 @@ async function runAnalysis()
 		Reports = [...Reports, { url: url, name: files[0].name }]
 	}
 
-	showAnalysisBtn = true;
+	UI.busy = false;
 }
 
 
@@ -93,7 +97,7 @@ onMount(async () => {
 	Fastp.init()
 		.then(() => Fastp.exec("--version"))
 		.then(d => {
-			showAnalysisBtn = true;
+			UI.busy = false;
 			console.log(d.stderr);
 		});
 
@@ -105,9 +109,6 @@ onMount(async () => {
 // -----------------------------------------------------------------------------
 // HTML
 // -----------------------------------------------------------------------------
-
-let showExtraParams = false;
-let showAnalysisBtn = false;
 </script>
 
 <style>
@@ -189,12 +190,12 @@ code {
 				<br />
 
 				<p class="text-center mt-2">
-					<button on:click={() => showExtraParams = !showExtraParams} type="button" class="btn btn-link p-0" style="vertical-align: baseline">
-						<strong>{showExtraParams ? "Fewer" : "More"} settings</strong>
+					<button on:click={() => UI.showExtraParams = !UI.showExtraParams} type="button" class="btn btn-link p-0" style="vertical-align: baseline">
+						<strong>{UI.showExtraParams ? "Fewer" : "More"} settings</strong>
 					</button>
 				</p>
 
-				<div class={showExtraParams ? "" : "d-none"}>
+				<div class={UI.showExtraParams ? "" : "d-none"}>
 					<h6>3' end trimming <small>(Optional)</small></h6>
 					<Parameter label="Trim PolyX" type="checkbox" bind:value={Options.trimPolyX} help="Enable trimming of polyA/C/G/T tails" />
 					<Parameter label="PolyX min length" type="text" append="bp" bind:value={Options.trimPolyXLength} disabled={!Options.trimPolyX} help="Minimum length of PolyX tail at 3' end" />
@@ -225,7 +226,7 @@ code {
 			<!-- Launch analysis -->
 			<div class="col-md-4">
 				<h4 class="mb-4">Step 3: Run!</h4>
-				<p><button class="btn btn-lg btn-primary col-md-12" on:click={runAnalysis} disabled={!showAnalysisBtn}>Run analysis &raquo;</button></p>
+				<p><button class="btn btn-lg btn-primary col-md-12" on:click={runAnalysis} disabled={UI.busy}>Run analysis &raquo;</button></p>
 
 				<hr />
 
