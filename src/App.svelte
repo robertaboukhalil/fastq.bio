@@ -1,7 +1,8 @@
 <script>
 import { onMount } from "svelte";
-import { fade } from "svelte/transition";
 import { Aioli } from "@biowasm/aioli";
+
+import * as utils from "./utils.js";
 import Parameter from "./Parameter.svelte";
 
 
@@ -9,184 +10,77 @@ import Parameter from "./Parameter.svelte";
 // Globals
 // -----------------------------------------------------------------------------
 
-let FILES = [];							// Files uploaded by user
-let REPORTS = [];						// Reports output by fastp
-let FASTP = new Aioli("fastp/0.20.1");	// Fastp command line tool (compiled to WebAssembly)
-
-
-// -----------------------------------------------------------------------------
-// Fastp parameters
-// -----------------------------------------------------------------------------
-
-let OPTIONS = {
+let Files = [];							// Files uploaded by user
+let FilesPaired = [];					// Array of arrays of paired FASTQ files (R1/R2 or _1/_2)
+let Reports = [];						// Reports output by fastp
+let Fastp = new Aioli("fastp/0.20.1");	// Fastp command line tool (compiled to WebAssembly)
+let Params = [];						// Fastp CLI parameters - Array
+let ParamsCLI = "";						// Fastp CLI parameters - String
+let Options = {							// Fastp UI Options
 	nbReads: 5000,
+	minMapQ: 15,
+	minQualifiedBases: 40,
+	minReadLength: 15,
 	trimAdapters: "",
 	trimAdaptersR1: "",
 	trimAdaptersR2: "",
 	trimFrontR1: 0,
 	trimFrontR2: 0,
-	trimTailR1: 0,
-	trimTailR2: 0,
 	trimPolyX: "",
 	trimPolyXLength: 10,
-	minMapQ: 15,
-	minQualifiedBases: 40,
-	minReadLength: 15
+	trimTailR1: 0,
+	trimTailR2: 0
 };
 
-$: PARAMS = {
-	"reads_to_process": {
-		enabled: true,
-		value: OPTIONS.nbReads
-	},
-	"disable_adapter_trimming": {
-		enabled: OPTIONS.trimAdapters !== true,
-		value: ""
-	},
-	"adapter_sequence": {
-		enabled: OPTIONS.trimAdapters === true && OPTIONS.trimAdaptersR1 != "",
-		value: OPTIONS.trimAdaptersR1
-	},
-	"adapter_sequence_r2": {
-		enabled: OPTIONS.trimAdapters === true && OPTIONS.trimAdaptersR2 != "",
-		value: OPTIONS.trimAdaptersR2
-	},
-	"trim_front1": {
-		enabled: OPTIONS.trimFrontR1 > 0,
-		value: OPTIONS.trimFrontR1
-	},
-	"trim_front2": {
-		enabled: OPTIONS.trimFrontR2 > 0,
-		value: OPTIONS.trimFrontR2
-	},
-	"trim_tail1": {
-		enabled: OPTIONS.trimTailR1 > 0,
-		value: OPTIONS.trimTailR1
-	},
-	"trim_tail2": {
-		enabled: OPTIONS.trimTailR2 > 0,
-		value: OPTIONS.trimTailR2
-	},
-	"trim_poly_x": {
-		enabled: OPTIONS.trimPolyX === true,
-		value: ""
-	},
-	"poly_x_min_len": {
-		enabled: OPTIONS.trimPolyX === true && OPTIONS.trimPolyXLength != "",
-		value: OPTIONS.trimPolyXLength
-	},
-	"qualified_quality_phred": {
-		enabled: true,
-		value: OPTIONS.minMapQ
-	},
-	"unqualified_percent_limit": {
-		enabled: true,
-		value: OPTIONS.minQualifiedBases
-	},
-	"length_required": {
-		enabled: true,
-		value: OPTIONS.minReadLength
-	}
-}
+
+// -----------------------------------------------------------------------------
+// Reactive statements
+// -----------------------------------------------------------------------------
+
+// Pair up FASTQ files based on file names
+$: FilesPaired = utils.getFastqPairs(Files);
+
+// Convert UI options to CLI parameters
+$: Params = utils.getParams(Options);
 
 // Generate CLI parameters from user input
-$: PARAMS_CLI = Object.entries(PARAMS)
+$: ParamsCLI = Object.entries(Params)
 	.filter(d => d[1].enabled)
 	.map(d => `--${d[0]} ${d[1].value}`);
 
-// Pair up FASTQ files based on file names
-$: FILES_PAIRED = getFastqPairs(FILES);
-
 
 // -----------------------------------------------------------------------------
-// Utility functions
-// -----------------------------------------------------------------------------
-
-function deleteFile(file)
-{
-	FILES = Array.from(FILES).filter(f => f.name != file.name);
-}
-
-
-function getFastqPairs(filelist)
-{
-	let result = [];
-	// Convert from FileList to array
-	let files = Array.from(filelist);
-	// Natural sort (https://stackoverflow.com/a/38641281)
-	files.sort((a, b) => a.name.localeCompare(b.name, undefined, {
-		numeric: true,
-		sensitivity: 'base'
-	}));
-
-	// Check for matching FASTQ pairs by file name
-	while(files.length > 0)
-	{
-		// Check for valid FASTQ patterns
-		let file = files.shift();
-		let matchedPair = false;
-		if(files[0] != null)
-			for(let pattern of [{ r1: "R1", r2: "R2" }, { r1: "_1", r2: "_2" }])
-				if(file.name.includes(pattern.r1) && file.name.replace(pattern.r1, pattern.r2) == files[0].name) {
-					let fileNext = files.shift();
-					result.push([ file, fileNext ]);
-					matchedPair = true;
-					break;
-				}
-		// If didn't match, then it's a singleton
-		if(!matchedPair)
-			result.push([ file ]);
-	}
-
-	return result;
-}
-
-
-function getCLIOutputPath(files)
-{
-	return `${files[0].path.replace("/data", "/tmp")}`;
-}
-
-
-function getCLIOptions(files)
-{
-	let command = ` ${PARAMS_CLI.join(" ")} --html ${getCLIOutputPath(files)}.html --json ${getCLIOutputPath(files)}.json --in1 ${files[0].path} `;
-	if(files[1] != null)
-		command += ` --in2 ${files[1].path} `;
-	return command;
-}
-
-
 // Launch the fastp analysis on selected files
-function runAnalysis()
+// -----------------------------------------------------------------------------
+
+async function runAnalysis()
 {
 	showAnalysisBtn = false;
 
-	// CLI parameters we'll use for all files
-	let paramsShared = PARAMS_CLI.join(" ");
-
-	// Process each file
-	let promises = [];
-	for(let filePair of FILES_PAIRED)
+	// Process file pairs
+	for(let files of FilesPaired)
 	{
 		// TODO: support sample FASTQ file
-		// if(file instanceof File)
+		// console.log(await FASTP.ls("/fastp/testdata/"))  // R1.fq, R2.fq
 
 		// Mount files
-		let filesMounted = [];
-		let promisesMount = filePair.map(file => Aioli.mount(file));
-		let promise = Promise.all(promisesMount)
-			// Once files mounted, run fastp with user-specified settings
-			.then(files => { filesMounted = files; return FASTP.exec(`${getCLIOptions(filesMounted)}`); })
-			// Once done, download the .html file as a URL
-			.then(d => FASTP.download(`${getCLIOutputPath(filesMounted)}.html`))
-			// Push that URL to the UI
-			.then(url => REPORTS = [...REPORTS, { url: url, name: filesMounted[0].name }])
-		promises.push(promise);
+		files = await Promise.all(files.map(f => Aioli.mount(f)));
+
+		// Construct fastp command
+		let output = `--html ${utils.getOutputPath(files)}.html --json ${utils.getOutputPath(files)}.json`
+		let command = `${ParamsCLI.join(" ")} ${output} --in1 ${files[0].path} `;
+		if(files[1] != null)
+			command += `--in2 ${files[1].path}`;
+
+		// Run fastp with user settings
+		await Fastp.exec(command);
+
+		// Get path of HTML output file
+		let url = await Fastp.download(`${utils.getOutputPath(files)}.html`);
+		Reports = [...Reports, { url: url, name: files[0].name }]
 	}
 
-	// Once all files are processed, hide spinner
-	Promise.all([promises]).then(values => showAnalysisBtn = true);
+	showAnalysisBtn = true;
 }
 
 
@@ -196,8 +90,8 @@ function runAnalysis()
 
 onMount(async () => {
 	// Initialize fastp and output the version
-	FASTP.init()
-		.then(() => FASTP.exec("--version"))
+	Fastp.init()
+		.then(() => Fastp.exec("--version"))
 		.then(d => {
 			showAnalysisBtn = true;
 			console.log(d.stderr);
@@ -228,7 +122,7 @@ code {
 </style>
 
 <nav class="navbar navbar-expand-md navbar-dark fixed-top bg-dark">
-	<a class="navbar-brand" href="/">fastp.js</a>
+	<a class="navbar-brand" href="/">fastq.bio</a>
 	<div class="collapse navbar-collapse" id="navbarsExampleDefault">
 		<ul class="navbar-nav mr-auto"></ul>
 		<ul class="navbar-nav">
@@ -240,9 +134,9 @@ code {
 </nav>
 
 <main role="main">
-	<div class="jumbotron mt-5 pb-4">
+	<div class="jumbotron mt-4 pb-3">
 		<div class="container">
-			<h1 class="display-5">&#x1f9ec;&nbsp; Peek at Your Sequencing Data</h1>
+			<h2 class="display-5">&#x1f9ec;&nbsp; Peek at Your Sequencing Data</h2>
 			<p class="lead">Quickly generate data quality reports for FASTQ files. Your data never leaves the browser.</p>
 		</div>
 	</div>
@@ -255,22 +149,25 @@ code {
 
 				<h6>Choose FASTQ files to analyze</h6>
 				<div class="custom-file mb-2">
-					<input type="file" class="custom-file-input" id="customFile" bind:files={FILES} accept=".fq,.fastq,.gz" multiple>
+					<input type="file" class="custom-file-input" id="customFile" bind:files={Files} accept=".fq,.fastq,.gz" multiple>
 					<label class="custom-file-label" for="customFile">Click here to select files</label>
 				</div>
 				<p class="text-center mt-2">
 					or use a
-					<button on:click={() => FILES = [{'name':'sample'}]} type="button" class="btn btn-link p-0" style="vertical-align: baseline">
+					<button on:click={() => Files = [{'name':'sample'}]} type="button" class="btn btn-link p-0" style="vertical-align: baseline">
 						<strong>sample FASTQ</strong>
 					</button>
 					file
 				</p>
 				<hr />
-				{#each FILES_PAIRED as filePair}
+				{#each FilesPaired as filePair}
 					<div class="card mb-2">
 						<div class="card-body">
 							{#each filePair as file}
-								<button on:click={() => deleteFile(file)} type="button" class="btn btn-link p-0" style="vertical-align: baseline">
+								<button
+									type="button" class="btn btn-link p-0" style="vertical-align: baseline"
+									on:click={() => Files = Array.from(Files).filter(f => f.name != file.name)}
+								>
 									<strong>X</strong>
 								</button>
 								{file.name}<br />
@@ -282,13 +179,13 @@ code {
 
 			<!-- Parameters -->
 			<div class="col-md-4">
-				<h4 class="mb-4">Step 2: Parameters</h4>
+				<h4 class="mb-4">Step 2: Set Parameters</h4>
 
 				<h6>General Settings</h6>
-				<Parameter label="#Reads to Analyze" type="text" bind:value={OPTIONS.nbReads} />
-				<Parameter label="Min Read Length" type="text" bind:value={OPTIONS.minReadLength} append="bp" />
-				<Parameter label="Min Base Quality" type="text" bind:value={OPTIONS.minMapQ} prepend="Q" help="Mark a base as low quality if it has a Phred score < Q{OPTIONS.minMapQ}" />
-				<Parameter label="Max Low Qual Bases" type="text" bind:value={OPTIONS.minQualifiedBases} append="%" help="Filter out reads where over {OPTIONS.minQualifiedBases}% of bases are low quality (i.e. Phred scores <Q{OPTIONS.minMapQ})" />
+				<Parameter label="#Reads to Analyze" type="text" bind:value={Options.nbReads} />
+				<Parameter label="Min Read Length" type="text" bind:value={Options.minReadLength} append="bp" />
+				<Parameter label="Min Base Quality" type="text" bind:value={Options.minMapQ} prepend="Q" help="Mark a base as low quality if it has a Phred score < Q{Options.minMapQ}" />
+				<Parameter label="Max Low Qual Bases" type="text" bind:value={Options.minQualifiedBases} append="%" help="Filter out reads where over {Options.minQualifiedBases}% of bases are low quality (i.e. Phred scores <Q{Options.minMapQ})" />
 				<br />
 
 				<p class="text-center mt-2">
@@ -297,29 +194,29 @@ code {
 					</button>
 				</p>
 
-				<div class={showExtraParams ? "" : "d-none"} transition:fade={{ duration: 200 }}>
+				<div class={showExtraParams ? "" : "d-none"}>
 					<h6>3' end trimming <small>(Optional)</small></h6>
-					<Parameter label="Trim PolyX" type="checkbox" bind:value={OPTIONS.trimPolyX} help="Enable trimming of polyA/C/G/T tails" />
-					<Parameter label="PolyX min length" type="text" append="bp" bind:value={OPTIONS.trimPolyXLength} disabled={!OPTIONS.trimPolyX} help="Minimum length of PolyX tail at 3' end" />
+					<Parameter label="Trim PolyX" type="checkbox" bind:value={Options.trimPolyX} help="Enable trimming of polyA/C/G/T tails" />
+					<Parameter label="PolyX min length" type="text" append="bp" bind:value={Options.trimPolyXLength} disabled={!Options.trimPolyX} help="Minimum length of PolyX tail at 3' end" />
 					<br />
 
 					<h6>Read Trimming <small>(Optional)</small></h6>
-					<Parameter label="Trim 5' end of R1" type="text" append="bp" bind:value={OPTIONS.trimFrontR1} help="Trim {OPTIONS.trimFrontR1}bp from the 5' end of R1" />
-					<Parameter label="Trim 3' end of R1" type="text" append="bp" bind:value={OPTIONS.trimTailR1} help="Trim {OPTIONS.trimTailR1}bp from the 3' end of R1" />
-					<Parameter label="Trim 5' end of R2" type="text" append="bp" bind:value={OPTIONS.trimFrontR2} help="Trim {OPTIONS.trimFrontR2}bp from the 5' end of R2" />
-					<Parameter label="Trim 3' end of R2" type="text" append="bp" bind:value={OPTIONS.trimTailR2} help="Trim {OPTIONS.trimTailR2}bp from the 3' end of R2" />
+					<Parameter label="Trim 5' end of R1" type="text" append="bp" bind:value={Options.trimFrontR1} help="Trim {Options.trimFrontR1}bp from the 5' end of R1" />
+					<Parameter label="Trim 3' end of R1" type="text" append="bp" bind:value={Options.trimTailR1} help="Trim {Options.trimTailR1}bp from the 3' end of R1" />
+					<Parameter label="Trim 5' end of R2" type="text" append="bp" bind:value={Options.trimFrontR2} help="Trim {Options.trimFrontR2}bp from the 5' end of R2" />
+					<Parameter label="Trim 3' end of R2" type="text" append="bp" bind:value={Options.trimTailR2} help="Trim {Options.trimTailR2}bp from the 3' end of R2" />
 					<br />
 
 					<h6>Adapter Trimming <small>(Optional)</small></h6>
-					<Parameter label="Trim Adapters" type="checkbox" bind:value={OPTIONS.trimAdapters} help="Enable adapter trimming" />
-					<Parameter label="Adapters R1" type="text" bind:value={OPTIONS.trimAdaptersR1} disabled={!OPTIONS.trimAdapters} help="Adapter sequence for Read 1. If no adapters are specified, they are auto-detected for single-end reads" />
-					<Parameter label="Adapters R2" type="text" bind:value={OPTIONS.trimAdaptersR2} disabled={!OPTIONS.trimAdapters} help="Adapter sequence for Read 2" />
+					<Parameter label="Trim Adapters" type="checkbox" bind:value={Options.trimAdapters} help="Enable adapter trimming" />
+					<Parameter label="Adapters R1" type="text" bind:value={Options.trimAdaptersR1} disabled={!Options.trimAdapters} help="Adapter sequence for Read 1. If no adapters are specified, they are auto-detected for single-end reads" />
+					<Parameter label="Adapters R2" type="text" bind:value={Options.trimAdaptersR2} disabled={!Options.trimAdapters} help="Adapter sequence for Read 2" />
 					<br />
 				</div>
 
 				<h6>Fastp Parameters:</h6>
 				<code>
-				{#each PARAMS_CLI as param}
+				{#each ParamsCLI as param}
 					{param}<br />
 				{/each}
 				</code>
@@ -332,7 +229,7 @@ code {
 
 				<hr />
 
-				{#each REPORTS as report}
+				{#each Reports as report}
 					<div class="card mb-2">
 						<div class="card-body">
 							<p>{report.name}</p>
