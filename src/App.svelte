@@ -9,8 +9,9 @@ import Parameter from "./Parameter.svelte";
 // Globals
 // -----------------------------------------------------------------------------
 
-let FILES = [];		// Files uploaded by user
-let REPORTS = [];	// Reports output by fastp
+let FILES = [];							// Files uploaded by user
+let REPORTS = [];						// Reports output by fastp
+let FASTP = new Aioli("fastp/0.20.1");	// Fastp command line tool (compiled to WebAssembly)
 
 
 // -----------------------------------------------------------------------------
@@ -93,47 +94,92 @@ $: PARAMS_CLI = Object.entries(PARAMS)
 	.filter(d => d[1].enabled)
 	.map(d => `--${d[0]} ${d[1].value}`);
 
+// Pair up FASTQ files based on file names
+$: FILES_PAIRED = getFastqPairs(FILES);
+
 
 // -----------------------------------------------------------------------------
-// 
+// Utility functions
 // -----------------------------------------------------------------------------
 
-// Initialize fastp and output the version
-let fastp = new Aioli("fastp/0.20.1");
-fastp
-	.init()
-	.then(() => fastp.exec("--version"))
-	.then(d => console.log(d.stderr));
+function getFastqPairs(filelist)
+{
+	let result = [];
+	let files = Array.from(filelist);
+	// Natural sort (https://stackoverflow.com/a/38641281)
+	files.sort((a, b) => a.name.localeCompare(b.name, undefined, {
+		numeric: true,
+		sensitivity: 'base'
+	}));
+
+	// Check for matching FASTQ pairs by file name
+	while(files.length > 0)
+	{
+		// Check for valid FASTQ patterns
+		let file = files.shift();
+		let matchedPair = false;
+		if(files[0] != null)
+			for(let pattern of [{ r1: "R1", r2: "R2" }, { r1: "_1", r2: "_2" }])
+				if(file.name.includes(pattern.r1) && file.name.replace(pattern.r1, pattern.r2) == files[0].name) {
+					let fileNext = files.shift();
+					result.push([ file, fileNext ]);
+					matchedPair = true;
+					break;
+				}
+		// If didn't match, then it's a singleton
+		if(!matchedPair)
+			result.push([ file ]);
+	}
+
+	return result;
+}
+
+
+function getCLIOutputPath(files)
+{
+	return `${files[0].path.replace("/data", "/tmp")}`;
+}
+
+
+function getCLIOptions(files)
+{
+	let command = ` ${PARAMS_CLI.join(" ")} --html ${getCLIOutputPath(files)}.html --json ${getCLIOutputPath(files)}.json --in1 ${files[0].path} `;
+	if(files[1] != null)
+		command += ` --in2 ${files[1].path} `;
+	return command;
+}
 
 
 // Launch the fastp analysis on selected files
 function runAnalysis()
 {
-	showSpinner = true;
+	showAnalysisBtn = false;
 
 	// CLI parameters we'll use for all files
-	let sharedParams = PARAMS_CLI.join(" ");
+	let paramsShared = PARAMS_CLI.join(" ");
 
 	// Process each file
 	let promises = [];
-	for(let file of FILES)
+	for(let filePair of FILES_PAIRED)
 	{
 		// TODO: support sample FASTQ file
-		if(file instanceof File)
-		{
-			let promise = Aioli.mount(file)
-				// Once file is mounted, run fastp on it
-				.then(f => fastp.exec(`${sharedParams} --in1 ${f.path} --html /tmp/wat.html`))
-				// Download the report as a URL
-				.then(d => fastp.download("/tmp/wat.html"))
-				// Add URL to the list of reports
-				.then(url => REPORTS = [...REPORTS, { url: url, name: file.name }]);
-			promises.push(promise);
-		}
+		// if(file instanceof File)
+
+		// Mount files
+		let filesMounted = [];
+		let promisesMount = filePair.map(file => Aioli.mount(file));
+		let promise = Promise.all(promisesMount)
+			// Once files mounted, run fastp with user-specified settings
+			.then(files => { filesMounted = files; return FASTP.exec(`${getCLIOptions(filesMounted)}`); })
+			// Once done, download the .html file as a URL
+			.then(d => FASTP.download(`${getCLIOutputPath(filesMounted)}.html`))
+			// Push that URL to the UI
+			.then(url => REPORTS = [...REPORTS, { url: url, name: filesMounted[0].name }])
+		promises.push(promise);
 	}
 
 	// Once all files are processed, hide spinner
-	Promise.all([promises]).then(values => showSpinner = false);
+	Promise.all([promises]).then(values => showAnalysisBtn = true);
 }
 
 
@@ -141,8 +187,18 @@ function runAnalysis()
 // On page load
 // -----------------------------------------------------------------------------
 
-// Enable jQuery tooltips
-onMount(async () => jQuery("[data-toggle='popover']").popover());
+onMount(async () => {
+	// Initialize fastp and output the version
+	FASTP.init()
+		.then(() => FASTP.exec("--version"))
+		.then(d => {
+			showAnalysisBtn = true;
+			console.log(d.stderr);
+		});
+
+	// Enable jQuery tooltips
+	jQuery("[data-toggle='popover']").popover();
+});
 
 
 // -----------------------------------------------------------------------------
@@ -150,7 +206,7 @@ onMount(async () => jQuery("[data-toggle='popover']").popover());
 // -----------------------------------------------------------------------------
 
 let showExtraParams = false;
-let showSpinner = false;
+let showAnalysisBtn = false;
 </script>
 
 <style>
@@ -192,7 +248,7 @@ code {
 
 				<h6>Choose FASTQ files to analyze</h6>
 				<div class="custom-file mb-2">
-					<input type="file" class="custom-file-input" id="customFile" bind:files={FILES} accept=".fq,.fastq,.fq.gz,.fastq.gz" multiple>
+					<input type="file" class="custom-file-input" id="customFile" bind:files={FILES} accept=".fq,.fastq,.gz" multiple>
 					<label class="custom-file-label" for="customFile">Click here to select files</label>
 				</div>
 				<p class="text-center mt-2">
@@ -256,7 +312,7 @@ code {
 			<!-- Launch analysis -->
 			<div class="col-md-4">
 				<h4 class="mb-4">Step 3: Run!</h4>
-				<p><button class="btn btn-lg btn-primary col-md-12" on:click={runAnalysis} disabled={showSpinner}>Run analysis &raquo;</button></p>
+				<p><button class="btn btn-lg btn-primary col-md-12" on:click={runAnalysis} disabled={!showAnalysisBtn}>Run analysis &raquo;</button></p>
 
 				<hr />
 
