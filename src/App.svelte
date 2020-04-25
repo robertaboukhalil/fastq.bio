@@ -64,11 +64,9 @@ async function runAnalysis()
 	// Process file pairs
 	for(let files of FilesPaired)
 	{
-		// TODO: support sample FASTQ file
-		// console.log(await FASTP.ls("/fastp/testdata/"))  // R1.fq, R2.fq
-
-		// Mount files
-		files = await Promise.all(files.map(f => Aioli.mount(f)));
+		// Mount files (skip that part if we're processing the sample FASTQ)
+		if(files[0] instanceof File)
+			files = await Promise.all(files.map(f => Aioli.mount(f)));
 
 		// Construct fastp command
 		let output = `--html ${utils.getOutputPath(files)}.html --json ${utils.getOutputPath(files)}.json`
@@ -155,7 +153,13 @@ code {
 				</div>
 				<p class="text-center mt-2">
 					or use a
-					<button on:click={() => Files = [{'name':'sample'}]} type="button" class="btn btn-link p-0" style="vertical-align: baseline">
+					<button 
+						type="button" class="btn btn-link p-0" style="vertical-align: baseline"
+						on:click={() => Files = [
+							{ name: "Sample FASTQ - R1", path: "/fastp/testdata/R1.fq" },
+							{ name: "Sample FASTQ - R2", path: "/fastp/testdata/R2.fq" },
+						]}
+					>
 						<strong>sample FASTQ</strong>
 					</button>
 					file
@@ -166,10 +170,10 @@ code {
 						<div class="card-body">
 							{#each filePair as file}
 								<button
-									type="button" class="btn btn-link p-0" style="vertical-align: baseline"
+									type="button" class="btn btn-sm btn-light"
 									on:click={() => Files = Array.from(Files).filter(f => f.name != file.name)}
 								>
-									<strong>X</strong>
+									<strong>&#x2716;</strong>
 								</button>
 								{file.name}<br />
 							{/each}
