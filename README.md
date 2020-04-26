@@ -6,9 +6,11 @@ An interactive web tool that generates quality reports from DNA sequencing data 
 ![Screenshot](https://fastq.sandbox.bio/assets/img/screenshot2.png)
 
 
-## Build
+## How to use fastq.bio
 
-To run fastq.bio locally:
+You can use the hosted version at [fastq.bio](http://fastq.bio).
+
+Or, to run fastq.bio locally:
 
 ```bash
 npm install
