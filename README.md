@@ -1,93 +1,36 @@
-*Looking for a shareable component template? Go here --> [sveltejs/component-template](https://github.com/sveltejs/component-template)*
+# fastq.bio
+An interactive web tool that generates data quality reports from DNA sequencing data, powered by WebAssembly.
 
----
-
-# svelte app
-
-This is a project template for [Svelte](https://svelte.dev) apps. It lives at https://github.com/sveltejs/template.
-
-To create a new project based on this template using [degit](https://github.com/Rich-Harris/degit):
-
-```bash
-npx degit sveltejs/template svelte-app
-cd svelte-app
-```
-
-*Note that you will need to have [Node.js](https://nodejs.org) installed.*
+![Screenshot](https://res.cloudinary.com/indysigner/image/fetch/f_auto,q_auto/w_1600/https://cloud.netlifyusercontent.com/assets/344dbf88-fdf9-42bb-adb4-46f01eedd629/06e27be8-1fef-468b-9d23-40ae53e0a354/webassembly-speed-web-app1.png)
 
 
-## Get started
+## Build
 
-Install the dependencies...
+To run fastq.bio locally:
 
 ```bash
-cd svelte-app
 npm install
-```
-
-...then start [Rollup](https://rollupjs.org):
-
-```bash
-npm run dev
-```
-
-Navigate to [localhost:5000](http://localhost:5000). You should see your app running. Edit a component file in `src`, save it, and reload the page to see your changes.
-
-By default, the server will only respond to requests from localhost. To allow connections from other computers, edit the `sirv` commands in package.json to include the option `--host 0.0.0.0`.
-
-
-## Building and running in production mode
-
-To create an optimised version of the app:
-
-```bash
 npm run build
 ```
 
-You can run the newly built app with `npm run start`. This uses [sirv](https://github.com/lukeed/sirv), which is included in your package.json's `dependencies` so that the app will work when you deploy to platforms like [Heroku](https://heroku.com).
+and open the `index.html` file in your browser.
 
 
-## Single-page app mode
+## Architecture
 
-By default, sirv will only respond to requests that match files in `public`. This is to maximise compatibility with static fileservers, allowing you to deploy your app anywhere.
-
-If you're building a single-page app (SPA) with multiple routes, sirv needs to be able to respond to requests for *any* path. You can make it so by editing the `"start"` command in package.json:
-
-```js
-"start": "sirv public --single"
-```
+![Architecture](https://res.cloudinary.com/indysigner/image/fetch/f_auto,q_auto/w_1600/https://cloud.netlifyusercontent.com/assets/344dbf88-fdf9-42bb-adb4-46f01eedd629/a6d54294-e93c-496c-96b0-1888062913c5/webassembly-speed-web-app3.png)
 
 
-## Deploying to the web
+- The DNA sequencing toolkit [seqtk](https://github.com/lh3/seqtk) is compiled from C to WebAssembly (see Makefile)
+- Use [Aioli](https://github.com/robertaboukhalil/aioli) to mount the file a user is given onto a virtual file system in the browser
+- Sample random chunks of data from the file and run `seqtk` on that chunk inside the WebWorker (to preserve the app's responsiveness)
+- Update the plot with results
 
-### With [now](https://zeit.co/now)
 
-Install `now` if you haven't already:
+## Why WebAssembly
 
-```bash
-npm install -g now
-```
+In short, WebAssembly allows us to avoid rewriting existing tools like `seqtk` to JavaScript, and gives us a significant speedup over running it in JavaScript:
 
-Then, from within your project folder:
+![Performance optimization](https://res.cloudinary.com/indysigner/image/fetch/f_auto,q_auto/w_1600/https://cloud.netlifyusercontent.com/assets/344dbf88-fdf9-42bb-adb4-46f01eedd629/41d4b2ef-fa85-4a1f-ba23-f4abbbf44ac4/webassembly-speed-web-app6.png)
 
-```bash
-cd public
-now deploy --name my-project
-```
-
-As an alternative, use the [Now desktop client](https://zeit.co/download) and simply drag the unzipped project folder to the taskbar icon.
-
-### With [surge](https://surge.sh/)
-
-Install `surge` if you haven't already:
-
-```bash
-npm install -g surge
-```
-
-Then, from within your project folder:
-
-```bash
-npm run build
-surge public my-project.surge.sh
-```
+For details, check out my [Smashing Magazine article](https://www.smashingmagazine.com/2019/04/webassembly-speed-web-app/).

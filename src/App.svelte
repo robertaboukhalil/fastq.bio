@@ -134,7 +134,7 @@ code {
 		<ul class="navbar-nav mr-auto"></ul>
 		<ul class="navbar-nav">
 			<li class="nav-item active">
-				<a class="nav-link" href="/">Code</a>
+				<a class="nav-link" href="https://github.com/robertaboukhalil/fastq.bio">Code</a>
 			</li>
 		</ul>
 	</div>

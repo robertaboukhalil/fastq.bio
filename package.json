@@ -1,6 +1,13 @@
 {
   "name": "fastq.bio",
-  "version": "1.0.0",
+  "version": "3.0.0",
+  "description": "An interactive web tool for quality control of DNA sequencing data",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/robertaboukhalil/fastq.bio"
+  },
+  "author": "Robert Aboukhalil",
+  "license": "MIT",
   "scripts": {
     "build": "rollup -c",
     "dev": "rollup -c -w",
