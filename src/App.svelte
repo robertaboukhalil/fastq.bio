@@ -85,6 +85,14 @@ async function runAnalysis()
 	UI.busy = false;
 }
 
+// Load the HTML report in a new tab.
+// Note that just doing <a href="<url>" target="_blank"> is blocked by AdBlockers...
+function loadReport(url)
+{
+	let newTab = window.open("/loading.html");
+	newTab.onload = () => newTab.location = url;
+}
+
 
 // -----------------------------------------------------------------------------
 // On page load
@@ -237,8 +245,8 @@ code {
 				{#each Reports as report}
 					<div class="card mb-2">
 						<div class="card-body">
-							<p>{report.name}</p>
-							<a target="_blank" href={report.url} class="btn btn-sm btn-primary">Open Report</a>
+							<p>{report.name}</p> 
+							<button class="btn btn-sm btn-primary" on:click={d => loadReport(report.url)}>Open Report</button>
 						</div>
 					</div>
 				{/each}
