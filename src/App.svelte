@@ -160,17 +160,17 @@ code {
 					<label class="custom-file-label" for="customFile">Click here to select files</label>
 				</div>
 				<p class="text-center mt-2">
-					or use a
+					or use
 					<button 
 						type="button" class="btn btn-link p-0" style="vertical-align: baseline"
 						on:click={() => Files = [
+							{ name: "NA12878.fastq.gz", path: "/fastp/testdata/NA12878.fastq.gz" },
 							{ name: "Sample FASTQ - R1", path: "/fastp/testdata/R1.fq" },
 							{ name: "Sample FASTQ - R2", path: "/fastp/testdata/R2.fq" },
 						]}
 					>
-						<strong>sample FASTQ</strong>
+						<strong>sample FASTQ files</strong>
 					</button>
-					file
 				</p>
 				<hr />
 				{#each FilesPaired as filePair}
