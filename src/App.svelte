@@ -78,7 +78,9 @@ async function runAnalysis()
 		await Fastp.exec(command);
 
 		// Get path of HTML output file
-		let url = await Fastp.download(`${utils.getOutputPath(files)}.html`);
+		let report = await Fastp.cat(`${utils.getOutputPath(files)}.html`);
+        let blob = new Blob([ report ], { type: "text/html" });
+        let url = URL.createObjectURL(blob);
 		Reports = [...Reports, { url: url, name: files[0].name }]
 	}
 
