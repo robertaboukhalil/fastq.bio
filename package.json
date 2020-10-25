@@ -1,6 +1,6 @@
 {
   "name": "fastq.bio",
-  "version": "3.0.0",
+  "version": "3.0.1",
   "description": "An interactive web tool for quality control of DNA sequencing data",
   "repository": {
     "type": "git",
@@ -23,7 +23,7 @@
     "svelte": "^3.0.0"
   },
   "dependencies": {
-    "@biowasm/aioli": "^1.1.3",
+    "@biowasm/aioli": "^1.4.0",
     "sirv-cli": "^0.4.4"
   }
 }
