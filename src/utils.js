@@ -49,11 +49,6 @@ export function getFastqPairs(files)
 // Fastp CLI utility functions
 // -----------------------------------------------------------------------------
 
-export function getOutputPath(files)
-{
-	return `${files[0].path.replace("/data", "/tmp")}`;
-}
-
 export function getParams(options)
 {
 	return {

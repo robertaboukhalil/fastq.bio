@@ -1,6 +1,6 @@
 <script>
 import { onMount } from "svelte";
-import { Aioli } from "@biowasm/aioli";
+import Aioli from "@biowasm/aioli";
 
 import * as utils from "./utils.js";
 import Parameter from "./Parameter.svelte";
@@ -10,17 +10,17 @@ import Parameter from "./Parameter.svelte";
 // Globals
 // -----------------------------------------------------------------------------
 
-let Files = [];							// Files uploaded by user
-let FilesPaired = [];					// Array of arrays of paired FASTQ files (R1/R2 or _1/_2)
-let Reports = [];						// Reports output by fastp
-let Fastp = new Aioli("fastp/0.20.1");	// Fastp command line tool (compiled to WebAssembly)
-let Params = [];						// Fastp CLI parameters - Array
-let ParamsCLI = "";						// Fastp CLI parameters - String
-let UI = {								// General UI Options
+let Files = [];             // Files uploaded by user
+let FilesPaired = [];       // Array of arrays of paired FASTQ files (R1/R2 or _1/_2)
+let Reports = [];           // Reports output by fastp
+let CLI;	                // Aioli CLI object
+let Params = [];            // Fastp CLI parameters - Array
+let ParamsCLI = "";         // Fastp CLI parameters - String
+let UI = {                  // General UI Options
 	busy: true,
 	showExtraParams: false
 }
-let Options = {							// Fastp UI Options
+let Options = {				// Fastp UI Options
 	nbReads: 5000,
 	minMapQ: 15,
 	minQualifiedBases: 40,
@@ -66,22 +66,21 @@ async function runAnalysis()
 	{
 		// Mount files (skip that part if we're processing the sample FASTQ)
 		if(files[0] instanceof File)
-			files = await Promise.all(files.map(f => Aioli.mount(f)));
+			await CLI.mount(files);
 
 		// Construct fastp command
-		let output = `--html ${utils.getOutputPath(files)}.html --json ${utils.getOutputPath(files)}.json`
-		let command = `${ParamsCLI.join(" ")} ${output} --in1 ${files[0].path} `;
+		let command = `fastp ${ParamsCLI.join(" ")} --html ${files[0].name}.html --json ${files[0].name}.json --in1 ${files[0].name} `;
 		if(files[1] != null)
-			command += `--in2 ${files[1].path}`;
+			command += `--in2 ${files[1].name}`;
 
 		// Run fastp with user settings
-		await Fastp.exec(command);
+		await CLI.exec(command);
 
 		// Get path of HTML output file
-		let report = await Fastp.cat(`${utils.getOutputPath(files)}.html`);
+		let report = await CLI.cat(`${files[0].name}.html`);
         let blob = new Blob([ report ], { type: "text/html" });
         let url = URL.createObjectURL(blob);
-		Reports = [...Reports, { url: url, name: files[0].name }]
+		Reports = [...Reports, { url: url, name: files[0].label }]
 	}
 
 	UI.busy = false;
@@ -102,12 +101,9 @@ function loadReport(url)
 
 onMount(async () => {
 	// Initialize fastp and output the version
-	Fastp.init()
-		.then(() => Fastp.exec("--version"))
-		.then(d => {
-			UI.busy = false;
-			console.log(d.stderr);
-		});
+	CLI = await new Aioli("fastp/0.20.1")
+	console.log("Loaded:", await CLI.exec("fastp --version"));
+	UI.busy = false;
 
 	// Enable jQuery tooltips
 	jQuery("[data-toggle='popover']").popover();
@@ -158,7 +154,7 @@ code {
 
 				<h6>Choose FASTQ files to analyze</h6>
 				<div class="custom-file mb-2">
-					<input type="file" class="custom-file-input" id="customFile" bind:files={Files} accept=".fq,.fastq,.gz" multiple>
+					<input type="file" class="custom-file-input" id="customFile" bind:files={Files} accept=".fq,.fastq,.fq.gz,.fastq.gz" multiple>
 					<label class="custom-file-label" for="customFile">Click here to select files</label>
 				</div>
 				<p class="text-center mt-2">
@@ -166,9 +162,9 @@ code {
 					<button 
 						type="button" class="btn btn-link p-0" style="vertical-align: baseline"
 						on:click={() => Files = [
-							{ name: "NA12878.fastq.gz", path: "/fastp/testdata/NA12878.fastq.gz" },
-							{ name: "Sample FASTQ - R1", path: "/fastp/testdata/R1.fq" },
-							{ name: "Sample FASTQ - R2", path: "/fastp/testdata/R2.fq" },
+							{ label: "NA12878.fastq.gz", name: "/fastp/testdata/NA12878.fastq.gz" },
+							{ label: "Sample FASTQ - R1", name: "/fastp/testdata/R1.fq" },
+							{ label: "Sample FASTQ - R2", name: "/fastp/testdata/R2.fq" },
 						]}
 					>
 						<strong>sample FASTQ files</strong>
@@ -185,7 +181,7 @@ code {
 								>
 									<strong>&#x2716;</strong>
 								</button>
-								{file.name}<br />
+								{file.label}<br />
 							{/each}
 						</div>
 					</div>
