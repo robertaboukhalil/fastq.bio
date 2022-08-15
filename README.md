@@ -14,10 +14,10 @@ Or, to run fastq.bio locally:
 
 ```bash
 npm install
-npm run build
+npm run dev
 ```
 
-and open the `index.html` file in your browser.
+and open the URL specified on the command line (e.g. http://localhost:5000).
 
 ## How it works
 
