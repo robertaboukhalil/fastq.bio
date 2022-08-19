@@ -80,7 +80,7 @@ async function runAnalysis()
 		let report = await CLI.cat(`${files[0].name}.html`);
         let blob = new Blob([ report ], { type: "text/html" });
         let url = URL.createObjectURL(blob);
-		Reports = [...Reports, { url: url, name: files[0].label }]
+		Reports = [...Reports, { url: url, name: files[0].label || files[0].name }]
 	}
 
 	UI.busy = false;
@@ -138,7 +138,7 @@ code {
 	</div>
 </nav>
 
-<main role="main">
+<main>
 	<div class="jumbotron mt-4 pb-3">
 		<div class="container">
 			<h2 class="display-5">&#x1f9ec;&nbsp; Peek at Your Sequencing Data</h2>
@@ -181,7 +181,7 @@ code {
 								>
 									<strong>&#x2716;</strong>
 								</button>
-								{file.label}<br />
+								{file.label || file.name}<br />
 							{/each}
 						</div>
 					</div>
