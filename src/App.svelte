@@ -154,7 +154,7 @@ code {
 
 				<h6>Choose FASTQ files to analyze</h6>
 				<div class="custom-file mb-2">
-					<input type="file" class="custom-file-input" id="customFile" bind:files={Files} accept=".fq,.fastq,.fq.gz,.fastq.gz" multiple>
+					<input type="file" class="custom-file-input" id="customFile" bind:files={Files} accept=".fq,.fastq,.gz" multiple>
 					<label class="custom-file-label" for="customFile">Click here to select files</label>
 				</div>
 				<p class="text-center mt-2">
